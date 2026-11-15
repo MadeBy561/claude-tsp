@@ -1,0 +1,21 @@
+{
+  "name": "claude-tsp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A native Tern surface for Claude Code: semantic transcript, tool cards, diffs, subagents, approvals, pickers and a real composer over Claude Code's stream-json session.",
+  "bin": {
+    "claude-tsp": "./bin/claude-tsp"
+  },
+  "files": ["bin", "dist", "docs", "README.md", "CHANGELOG.md", "LICENSE"],
+  "scripts": {
+    "start": "node ./bin/claude-tsp",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "build": "tsc -p .",
+    "prepare": "npm run build"
+  },
+  "engines": { "node": ">=22.19" },
+  "license": "MIT",
+  "dependencies": { "@stencil-hq/tern": "0.2.0" },
+  "devDependencies": { "@types/node": "^22.20.5", "typescript": "^5.9.3" }
+}

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# A stand-in for the GitHub CLI: records each call and answers as a healthy repository would.
+mkdir -p "${GH_FAKE_DIR:-/tmp/ctsp-verify-gh}"
+echo "$*" | cut -c1-300 >> ${GH_FAKE_DIR:-/tmp/ctsp-verify-gh}/calls.log
+case "$*" in
+  --version) echo "gh version 2.46.0 (fake)";;
+  "auth status") echo "Logged in to github.com account tester"; echo "  - Token scopes: 'repo', 'workflow'";;
+  "repo view"*) echo "acme/widgets";;
+  "api repos/acme/widgets --jq .permissions.admin") echo true;;
+  "api repos/acme/widgets --jq .default_branch") echo main;;
+  "api repos/acme/widgets/git/ref/heads/main"*) echo abc123;;
+  "api repos/acme/widgets/contents/"*) echo "Not Found" >&2; exit 1;;
+  "secret list"*) ;;
+  "secret set"*) cat > ${GH_FAKE_DIR:-/tmp/ctsp-verify-gh}/secret.txt;;
+  *) echo "{}";;
+esac

@@ -1,0 +1,164 @@
+== claude-pi-tsp, local model
+PASS  starts: welcome, model chip, mode pill
+PASS  the local model is named
+PASS  mode pill
+PASS  a write asks for approval
+PASS  the approval offers accept-all-edits
+PASS  the file was written after approval
+PASS  the mode became Accept edits
+PASS  a Write card
+PASS  Shift+Tab steps the mode (Plan)
+PASS  Shift+Tab steps over auto, which this model lacks (Ask)
+PASS  Ctrl+B backgrounds it: the pill shows
+PASS  /tasks lists the background command
+PASS  Stop ends the background command
+PASS  a question panel
+PASS  the answer is recorded on the card
+PASS  a subagent card
+PASS  the task list above the composer
+PASS  the subagent transcript sheet
+PASS  a !command row
+PASS  the shell output reached the model
+PASS  /inspect opens the command in the inspector
+PASS  a !command is traced, so its run can be replayed
+PASS  /btw answers from the conversation
+PASS  Alt+T turns thinking off
+PASS  Alt+T turns it back on
+PASS  /model opens and closes
+PASS  /mode opens and closes
+PASS  /context opens and closes
+PASS  /usage opens and closes
+PASS  /status opens and closes
+PASS  /mcp opens and closes
+PASS  /permissions opens and closes
+PASS  /agents opens and closes
+PASS  /todos opens and closes
+PASS  /skills opens and closes
+PASS  /output-style opens and closes
+PASS  /resume opens and closes
+PASS  /fork opens and closes
+PASS  /tree opens and closes
+PASS  /copy opens and closes
+PASS  /outline opens and closes
+PASS  /settings opens and closes
+PASS  /help opens and closes
+PASS  /doctor opens and closes
+PASS  /hooks opens and closes
+PASS  /memory opens and closes
+PASS  /plugin opens and closes
+PASS  Claude Code's own status line is drawn when switched on
+PASS  and leaves when switched off
+PASS  /plugin lists the plugin given on the command line
+PASS  /add-dir adds the folder
+PASS  /rename names the session
+PASS  /export writes the conversation
+PASS  an attached image chip
+PASS  the model read the image
+PASS  /compact leaves a compaction row
+PASS  the code word survives compaction
+PASS  /clear empties the transcript
+PASS  an edit changed the file
+PASS  an Edit card with a diff
+PASS  rewind restores the file
+PASS  rewind keeps only the earlier message
+PASS  the returned message can be sent again
+PASS  /tree shows the abandoned branch
+PASS  a move in the tree can carry a summary of the branch left
+PASS  Settings: Enter during a turn can queue for after it
+PASS  the queued message is sent when the turn ends
+PASS  /resume redraws another session
+PASS  with /trace on, Claude's Bash call is traced too
+PASS  the traced call's output is untouched
+PASS  a command is running
+PASS  Esc stops the turn
+PASS  a stopped turn leaves no error card
+PASS  the pane comes back from Claude Code's own UI
+PASS  light theme: the accent is Claude's clay
+PASS  dark theme: the clay shifts for a dark page
+PASS  dark theme: text is light on dark
+PASS  /theme hands the accent back to the Tern theme
+PASS  no TSP errors (claude-pi run)
+== claude-tsp, stock binary and prompt, Haiku
+PASS  the stock profile is named Claude Code
+PASS  a Claude model is named
+PASS  plan mode ends in a plan approval
+PASS  the plan approval offers accept-edits
+PASS  approving the plan switches to Accept edits
+PASS  the planned edit was made
+PASS  a prompt suggestion is offered
+PASS  Tab takes the suggestion into the draft
+PASS  an MCP server's form opens
+PASS  the form's answer reached the tool
+PASS  a failing hook leaves a warning line
+PASS  no TSP errors (stock run)
+== sign-in and retries
+PASS  without a sign-in the error card offers one
+PASS  /login opens the sign-in dialog with Claude's link
+PASS  a wrong code is refused and the dialog closes
+PASS  a wrong code writes no credentials
+PASS  /ide lists an IDE that announces the extension
+PASS  Settings: auto-compact off restarts Claude Code without it
+PASS  Settings: auto-retry off restarts Claude Code without retries
+PASS  no TSP errors (sign-in run)
+PASS  an overloaded API shows the retry countdown
+PASS  the turn recovers and says so
+PASS  the answer arrives after the retries
+PASS  no TSP errors (retry run)
+== plugin widgets
+PASS  a plugin's band is drawn above the composer
+PASS  pressing a plugin's button runs it and the band redraws
+PASS  a pane a plugin opens comes up with what it drew
+PASS  the open pane keeps a tab by the band
+PASS  a plugin's log line lands in the transcript
+PASS  no TSP errors (widget run)
+== commands that used to open Claude Code's own UI
+PASS  /sandbox draws Claude Code's sandbox state
+PASS  a sandbox choice is written by Claude Code's settings editor
+PASS  /stats counts the stored sessions
+PASS  /release-notes shows the changelog's versions
+PASS  /upgrade gives the plan page
+PASS  /privacy-settings gives the privacy page
+PASS  claude-pi, with non-essential traffic off, leaves out /remote-control
+PASS  the GitHub Actions setup finds the folder's repository
+PASS  it asks how the workflows sign in
+PASS  it says what will change before changing it
+PASS  the setup ends with the pull request page
+PASS  the workflow files and the secret went through the GitHub CLI, the key on stdin
+PASS  /diff shows the uncommitted changes
+PASS  /mobile gives its page
+PASS  /radio gives its page
+PASS  /stickers gives its page
+PASS  /install-slack-app gives its page
+PASS  /rate-limit-options lists what can be done about a limit
+PASS  /cd moves the session to another folder
+PASS  commands then run in the new folder
+PASS  the stop-all key answers when nothing is running
+PASS  the settings screen lists Claude Code's own switches
+PASS  the settings screen opens at its top, nothing under the header
+PASS  a settings dropdown opens its menu
+PASS  picking in the menu changes the setting
+PASS  /plugin browses the marketplaces
+PASS  hooks are edited in a settings file chosen here
+PASS  no TSP errors (native commands run)
+PASS  a new permission rule asks where to be saved
+PASS  the rule is written to the settings file
+PASS  Claude Code lists the new rule
+PASS  Ctrl+D removes the rule from the file
+PASS  /subtask forks the conversation and its result comes back
+PASS  /background hands the session to Claude Code's background service and starts a new one
+PASS  /feedback asks where the report goes before anything is sent
+PASS  a report saved locally is written by Claude Code and nothing is sent
+PASS  /remote-control turns it on and gives the session's link
+PASS  the sheet says remote control is on, with Disconnect
+PASS  /remote-control off disconnects
+PASS  no TSP errors (permissions run)
+== plugins from a marketplace, in a scratch config
+PASS  Add marketplace adds one from the picker
+PASS  Ctrl+O installs the chosen plugin
+PASS  the installed plugin is listed under Yours
+PASS  Ctrl+D uninstalls it
+PASS  /setup-vertex writes the provider to the user's settings
+PASS  /setup-bedrock replaces it: one provider at a time
+PASS  no TSP errors (plugin run)
+
+156 passed, 0 failed

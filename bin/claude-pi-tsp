@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# claude-pi in Tern: the claude-pi toolkit (its binary, config, sparse prompt,
+# tool set and plugin) behind the claude-tsp surface. Outside Tern, and for
+# non-interactive invocations, it is claude-pi itself.
+set -euo pipefail
+shopt -u patsub_replacement 2>/dev/null || true
+USER_HOME="$(getent passwd "$(id -un)" | cut -d: -f6)"
+ROOT="$USER_HOME/.claude-pi"
+HERE="$(dirname "$(readlink -f "$0")")"
+export CLAUDE_CONFIG_DIR="${CLAUDE_PI_CONFIG_DIR:-$ROOT}"
+export DISABLE_AUTOUPDATER=1
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_ERROR_REPORTING=1
+export CLAUDE_TSP_BIN="$USER_HOME/.local/share/claude-pi/claude"
+export CLAUDE_TSP_PROFILE=claude-pi
+tmpl="$(<"$ROOT/system-prompt.md")"
+prompt="${tmpl//\{\{CWD\}\}/$PWD}"
+args=(--system-prompt "$prompt"
+      --tools "Read,Bash,Edit,Write,LSP,Monitor,Agent,SendMessage,ListAgents,TaskStop,TaskCreate,TaskUpdate,TaskList,TaskGet,AskUserQuestion,WebSearch,WebFetch"
+      --strict-mcp-config --setting-sources user)
+if [ -z "${CLAUDE_PI_NO_MOD:-}" ] && [ -f "$ROOT/mods/pi-harness/.claude-plugin/plugin.json" ]; then
+  args+=(--plugin-dir "$ROOT/mods/pi-harness")
+fi
+exec node "$HERE/claude-tsp" "${args[@]}" "$@"
