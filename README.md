@@ -146,6 +146,45 @@ through omp's inventory row by row; `docs/PARITY.md` lists every
 feature against Claude Code's terminal UI, claude-pi, omp's and pi-tsp's
 surfaces, with what is not covered.
 
+## Release policy
+
+claude-tsp uses Semantic Versioning and one release per merged improvement:
+
+1. Every PR bumps `package.json` and adds a matching `CHANGELOG.md` section.
+2. The `version-check` workflow rejects a PR whose version is not higher than
+   `main`.
+3. Merging to `main` runs `release.yml`, which creates `v<version>`, publishes
+   a GitHub release and attaches `claude-tsp-<version>.tgz`.
+
+## Contributing
+
+Fixes and features are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+workflow, what each file is responsible for, and how to check a change in
+Tern; [CHANGELOG.md](CHANGELOG.md) has the release notes.
+
+## Repository
+
+```text
+bin/claude-tsp          entry point
+bin/claude-pi-tsp       the same surface in front of a claude-pi install
+src/launcher.ts         surface or stock Claude Code
+src/cc.ts               the claude child and its stream-json control protocol
+src/app.ts              focus, keys, commands, pickers, dialogs, the session
+src/model.ts            Claude Code messages and stored sessions -> items
+src/view/               items and state -> nodes (transcript, tools, dock, overlays)
+src/pluginui.ts         what Claude Code plugins draw, as Tern nodes
+src/github.ts           /install-github-app over the GitHub CLI
+src/settingsfile.ts     Claude Code's settings files: rules, env, switches
+src/stats.ts            /stats from the stored sessions
+src/sessions.ts         session discovery and previews
+src/theme.ts            the stylesheet and the clay accent
+src/editor.ts, vim.ts, picker.ts, keymap.ts, region.ts, shell.ts, chart.ts
+test/                   unit tests and fixtures
+tools/                  headless Tern harness and the end-to-end checks
+docs/                   parity record, protocol notes, screenshots
+.github/workflows/      CI, version check and release
+```
+
 ## Credits
 
 claude-tsp exists to bring more programs to Tern's Surface Protocol. It builds

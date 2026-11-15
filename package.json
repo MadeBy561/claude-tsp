@@ -5,17 +5,47 @@
   "type": "module",
   "description": "A native Tern surface for Claude Code: semantic transcript, tool cards, diffs, subagents, approvals, pickers and a real composer over Claude Code's stream-json session.",
   "bin": {
-    "claude-tsp": "./bin/claude-tsp"
+    "claude-tsp": "./bin/claude-tsp",
+    "claude-pi-tsp": "./bin/claude-pi-tsp"
   },
-  "files": ["bin", "dist", "docs", "README.md", "CHANGELOG.md", "LICENSE"],
+  "files": [
+    "bin",
+    "dist",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node ./bin/claude-tsp",
     "test": "npm run build && node --test test/*.test.mjs",
     "build": "tsc -p .",
     "prepare": "npm run build"
   },
-  "engines": { "node": ">=22.19" },
+  "engines": {
+    "node": ">=22.19"
+  },
   "license": "MIT",
-  "dependencies": { "@stencil-hq/tern": "0.2.0" },
-  "devDependencies": { "@types/node": "^22.20.5", "typescript": "^5.9.3" }
+  "dependencies": {
+    "@stencil-hq/tern": "0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MadeBy561/claude-tsp.git"
+  },
+  "homepage": "https://github.com/MadeBy561/claude-tsp#readme",
+  "bugs": {
+    "url": "https://github.com/MadeBy561/claude-tsp/issues"
+  },
+  "keywords": [
+    "tern",
+    "tsp",
+    "claude-code",
+    "claude",
+    "terminal"
+  ]
 }
