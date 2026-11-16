@@ -171,12 +171,14 @@ the clay off, and the Tern theme's own accent is used instead.
 | `CLAUDE_TSP_NOTIFICATIONS=0` | No desktop notification when a turn ends or an approval waits in a hidden pane |
 | `CLAUDE_TSP_RECORD=file`, `CLAUDE_TSP_TRACE=file` | Record the TSP traffic; log TSP errors |
 | `CLAUDE_TSP_CSS=file` | A stylesheet to try in place of the built-in one |
+| `CLAUDE_TSP_NO_UPDATE_CHECK=1` | Never ask GitHub whether a newer claude-tsp is out (`/update` still does when you run it) |
+| `CLAUDE_TSP_RELEASES_URL=url` | Read the releases from another address (a test feed) |
 
 ## Develop
 
 ```sh
 npm test                                  # build + 78 tests
-tools/verify.sh                           # 156 end-to-end checks in headless Tern (about 40 minutes)
+tools/verify.sh                           # 163 end-to-end checks in headless Tern (about 40 minutes)
 tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"   # headless Tern
 tools/say.sh a "hello" 6 shot-name        # type, send, wait, screenshot
 tools/serve.sh stop a

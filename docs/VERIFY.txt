@@ -160,5 +160,13 @@ PASS  Ctrl+D uninstalls it
 PASS  /setup-vertex writes the provider to the user's settings
 PASS  /setup-bedrock replaces it: one provider at a time
 PASS  no TSP errors (plugin run)
+== updates of claude-tsp, and the Claude Code check
+PASS  a newer release shows among the composer's facts
+PASS  /update shows what the release changes
+PASS  /update says it is the surface it updates, not Claude Code
+PASS  a skipped version is not offered again
+PASS  /doctor's check of the surface passes on this Claude Code
+PASS  no TSP errors (update run)
+PASS  claude-tsp --check-compat passes from a shell
 
-156 passed, 0 failed
+163 passed, 0 failed
