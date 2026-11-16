@@ -1,6 +1,6 @@
 {
   "name": "claude-tsp",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "description": "A native Tern surface for Claude Code: semantic transcript, tool cards, diffs, subagents, approvals, pickers and a real composer over Claude Code's stream-json session.",

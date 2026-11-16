@@ -474,6 +474,10 @@ cmd /doctor 6
 press "Check the surface"
 seen "/doctor's check of the surface passes on this Claude Code" "checks passed." 90
 ctl key Escape >/dev/null; sleep 1
+ctl split right >/dev/null; sleep 2
+[ "$(ctl dump '[data-role="omp.composer.effort"]' 2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin)["elements"][0]["opacity"])
+except Exception: print("")')" = "0" ] && ok "an unfocused pane folds the composer and Claude's chips fade with it" 1 || ok "an unfocused pane folds the composer and Claude's chips fade with it" 0
 [ -s $TRACE ] && ok "no TSP errors (update run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (update run)" 1
 "$D/serve.sh" stop $S
 kill $FEEDPID 2>/dev/null; rm -rf $FEED; rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/update.json"

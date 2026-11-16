@@ -199,7 +199,7 @@ the clay off, and the Tern theme's own accent is used instead.
 
 ```sh
 npm test                                  # build + 87 tests
-tools/verify.sh                           # 180 end-to-end checks in headless Tern (about 15 minutes)
+tools/verify.sh                           # 181 end-to-end checks in headless Tern (about 15 minutes)
 tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"   # headless Tern
 tools/say.sh a "hello" 6 shot-name        # type, send, wait, screenshot
 tools/serve.sh stop a

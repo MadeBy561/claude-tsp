@@ -50,6 +50,8 @@ export function stylesheet(clay: boolean): string {
 }`;
   return `${accent}
 [data-role="omp.welcome.wordmark"] { font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif; letter-spacing: -0.01em; }
+/* The group Claude's chips sit in is only a group: none of the pill Tern draws for that role. */
+[data-role="omp.composer.effort"] { background: none !important; box-shadow: none !important; padding: 0 !important; height: auto !important; scale: 1 !important; font: inherit !important; color: inherit !important; }
 [data-role="claude.composer.mode"] { border-radius: 999px; padding: 0 0.6em; cursor: pointer; background: var(--l1); }
 [data-role="claude.composer.mode"][data-tone="accent"] { background: var(--claude-wash); }
 [data-role="claude.composer.agents"] { border-radius: 999px; padding: 0 0.6em; cursor: pointer; background: var(--l1); }

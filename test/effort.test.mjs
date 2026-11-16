@@ -61,6 +61,9 @@ test("the composer shows ultracode and the agents, and drops the speed on a narr
   const actions = new Proxy({}, { get: (_, name) => () => pressed.push(name) });
   const wide = dock(conv, state, actions);
   assert.equal(role(wide, "claude.composer.ultracode").length, 1);
+  // Claude's chips sit in the one group Tern fades out when the composer folds (an unfocused pane).
+  const group = role(wide, "omp.composer.effort")[0];
+  assert.deepEqual(group.children.map(child => child.props.role), ["claude.composer.ultracode", "claude.composer.mode", "claude.composer.agents"]);
   const chip = role(wide, "claude.composer.agents")[0];
   assert.match(JSON.stringify(chip.children.map(child => child.props.spans ?? "")), /1 agent/);
   assert.equal(chip.props.tone, "info");

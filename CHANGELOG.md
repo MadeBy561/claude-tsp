@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.1] - 2026-11-16
+
+### Fixed
+
+- When the pane loses focus, Tern folds the composer to a one-line caption.
+  The permission-mode pill stayed lit on top of that caption, most visibly a
+  red "Bypass" over the pane's title; the Ultracode and agents chips would
+  have done the same. They now fade out with the rest of the bar and come
+  back when the pane is focused again (#1).
+
 ## [1.2.0] - 2026-11-16
 
 Subagents get a pane of their own, and `/effort` becomes the dialog Claude

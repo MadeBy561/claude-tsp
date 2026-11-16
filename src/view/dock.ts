@@ -295,17 +295,21 @@ function composer(conv: Conversation, state: DockState, on: DockActions): Node {
         h("text", { key: "name", wrap: "none", spans: [s(state.modelName || "no model", "statusLineModel")] }),
         h("icon", { key: "chev", name: "chev" }),
       ]),
-      conv.ultracode
-        ? h("row", { key: "ultra", role: "claude.composer.ultracode", tone: "accent", gap: "xs", align: "center", title: "Ultracode is on: a workflow for every task\nClick to turn it off", onClick: () => on.toggleUltracode() }, [
-            h("icon", { key: "icon", name: "sparkles", tone: "accent" }),
-            h("text", { key: "label", wrap: "none", spans: [s("Ultracode", "accent")] }),
-          ])
-        : null,
-      h("row", { key: "perm", role: "claude.composer.mode", tone: mode.tone, gap: "xs", align: "center", title: `${mode.hint}\nShift+Tab changes the mode`, onClick: () => on.cycleMode() }, [
-        h("icon", { key: "icon", name: mode.icon, tone: mode.tone }),
-        h("text", { key: "label", wrap: "none", spans: [s(mode.label, mode.tone)] }),
+      // Claude's own chips share a group under a role Tern fades out when the pane loses focus and the
+      // composer folds to its caption: on their own they would stay lit on top of that caption.
+      h("row", { key: "chips", role: "omp.composer.effort", gap: "sm", align: "center" }, [
+        conv.ultracode
+          ? h("row", { key: "ultra", role: "claude.composer.ultracode", tone: "accent", gap: "xs", align: "center", title: "Ultracode is on: a workflow for every task\nClick to turn it off", onClick: () => on.toggleUltracode() }, [
+              h("icon", { key: "icon", name: "sparkles", tone: "accent" }),
+              h("text", { key: "label", wrap: "none", spans: [s("Ultracode", "accent")] }),
+            ])
+          : null,
+        h("row", { key: "perm", role: "claude.composer.mode", tone: mode.tone, gap: "xs", align: "center", title: `${mode.hint}\nShift+Tab changes the mode`, onClick: () => on.cycleMode() }, [
+          h("icon", { key: "icon", name: mode.icon, tone: mode.tone }),
+          h("text", { key: "label", wrap: "none", spans: [s(mode.label, mode.tone)] }),
+        ]),
+        agentsChip(conv, on),
       ]),
-      agentsChip(conv, on),
       conv.busy && conv.tokPerSec > 0 && !state.narrow ? h("rate", { key: "rate", role: "omp.composer.rate", value: conv.tokPerSec, unit: "tok/s", title: "Generation rate" }) : null,
       extras(conv, state, on),
       h("text", { key: "usage", role: "omp.composer.usage", wrap: "none", text: usage, ...(usage ? { title: "Session cost" } : {}), onClick: () => on.showSession() }),
