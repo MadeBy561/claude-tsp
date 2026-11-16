@@ -35,6 +35,8 @@ export interface DockState {
   /** The model maker's logo, as an icon name. */
   modelIcon: string | undefined;
   effort: string;
+  /** A newer claude-tsp on offer (its version), or empty. */
+  update: string;
   /** Whether the model takes an effort level at all. */
   reasoning: boolean;
   /** A dialog owns the keyboard: the composer is not ready for a `send`. */
@@ -55,6 +57,7 @@ export interface DockActions {
   interrupt(): void;
   pickModel(): void;
   cycleEffort(): void;
+  showUpdate(): void;
   cycleMode(): void;
   showContext(): void;
   showSession(): void;
@@ -188,6 +191,7 @@ function extras(conv: Conversation, state: DockState, on: DockActions): Node {
   }
   if (conv.goal) segs.push(h("seg", { key: "goal", role: "claude.status.goal", side: "left", priority: 4, icon: "target", tone: "accent", title: `Goal: ${conv.goal}`, spans: [s("goal", "accent")] }));
   if (state.stashed) segs.push(h("seg", { key: "stash", role: "claude.status.stash", side: "left", priority: 2, icon: "archive", title: "A draft is set aside: Ctrl+S brings it back", spans: [s("stashed", "muted")] }));
+  if (state.update) segs.push(h("seg", { key: "update", role: "claude.status.update", side: "right", priority: 6, icon: "download", tone: "accent", title: `claude-tsp ${state.update} is out: click to see what is new and update`, spans: [s(`update ${state.update}`, "accent")], onClick: () => on.showUpdate() }));
   for (const name of ["five_hour", "seven_day"]) {
     const window = conv.rateWindows.get(name);
     if (!window) continue;

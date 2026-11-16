@@ -18,6 +18,9 @@
   <img alt="Claude Code 2.1.300+" src="https://img.shields.io/badge/Claude%20Code-2.1.300%2B-C2603F">
   <img alt="Tern 0.9.20+" src="https://img.shields.io/badge/Tern-0.9.20%2B-a06bff">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-2ea44f">
+  <a href="https://github.com/MadeBy561/claude-tsp/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/MadeBy561/claude-tsp?color=C2603F"></a>
+  <a href="https://github.com/MadeBy561/claude-tsp/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MadeBy561/claude-tsp/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/MadeBy561/claude-tsp/actions/workflows/claude-code-compat.yml"><img alt="Claude Code compatibility" src="https://github.com/MadeBy561/claude-tsp/actions/workflows/claude-code-compat.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -112,6 +115,44 @@ Code's non-essential traffic, which claude-pi's settings switch off.
 Plugins that draw (`$.ui`) are drawn too: their band sits above the composer,
 their panes open as sheets, and `/widgets` reaches their buttons by keyboard.
 
+## Updates
+
+claude-tsp asks GitHub once a day whether a newer release is out. When one is,
+a note appears among the composer's facts; nothing is installed until you say
+so.
+
+- `/update` shows what every release since yours changed and installs the
+  newest: a clone of this repository is moved to the release tag and rebuilt
+  (`git merge --ff-only`, `npm ci`), an `npm install -g` copy gets the
+  release's tarball. A clone that is not on `main`, or has changes of its own,
+  is left alone and the command to run is shown instead. A build that fails
+  puts the version you had back.
+- After an update, "Restart now" starts the new version in the same pane on
+  the same conversation.
+- "Check for updates" in `/settings` turns the daily question off, as does
+  `CLAUDE_TSP_NO_UPDATE_CHECK=1`. The request goes to `api.github.com` and
+  carries the version you run, nothing else.
+
+A patch release (`1.0.x`) fixes things, a minor one (`1.x.0`) adds features,
+and a major one changes something you have to act on.
+
+## Claude Code updates
+
+The surface drives Claude Code through control requests of its stream-json
+session, several of them not in the published SDK, so a Claude Code update can
+change one. Three things watch for that:
+
+- `claude-tsp --check-compat` asks a Claude Code for every request the surface
+  relies on and checks the fields it reads (`--bin <path>` for a Claude Code
+  other than the one on `PATH`, `--json` for a machine). The session it starts
+  has a config directory of its own: no sign-in, no prompt, nothing of yours
+  read or written. `/doctor` has the same check behind "Check the surface".
+- The `claude-code-compat` workflow runs it every day against the newest
+  Claude Code on npm and opens an issue when a check fails.
+- `package.json` records the range a release was checked with
+  (`claudeCode.minimum`, `claudeCode.tested`); a Claude Code older than the
+  minimum gets a warning at start.
+
 ## Look
 
 The surface follows Tern's theme, light or dark, including custom themes. Its
@@ -134,7 +175,7 @@ the clay off, and the Tern theme's own accent is used instead.
 ## Develop
 
 ```sh
-npm test                                  # build + 65 tests
+npm test                                  # build + 78 tests
 tools/verify.sh                           # 156 end-to-end checks in headless Tern (about 40 minutes)
 tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"   # headless Tern
 tools/say.sh a "hello" 6 shot-name        # type, send, wait, screenshot
@@ -155,6 +196,8 @@ claude-tsp uses Semantic Versioning and one release per merged improvement:
    `main`.
 3. Merging to `main` runs `release.yml`, which creates `v<version>`, publishes
    a GitHub release and attaches `claude-tsp-<version>.tgz`.
+4. A release sets `claudeCode.tested` in `package.json` to the newest Claude
+   Code that `claude-tsp --check-compat` and `tools/verify.sh` passed with.
 
 ## Contributing
 

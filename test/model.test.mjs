@@ -68,6 +68,17 @@ test("a subagent's forwarded messages fill its own conversation, and task events
   assert.equal(agent.stats.tokens, 1000);
 });
 
+test("a subagent's report loses the tools-used note Claude Code puts before it", () => {
+  const conv = new Conversation();
+  conv.onMessage(assistant("m1", [{ type: "tool_use", id: "ag1", name: "Agent", input: { description: "look", prompt: "look around", subagent_type: "Explore" } }]));
+  conv.onMessage(result("ag1", [{ type: "text", text: "[Subagent hand-back] …" }], { tool_use_result: { status: "completed", agentId: "k1", content: [{ type: "text", text: "<tools-used-before-summary>Bash, Read</tools-used-before-summary>\nThe host is up.\n\nNothing was changed." }] } }));
+  assert.equal(conv.items[0].output, "The host is up.\n\nNothing was changed.");
+  // A report that only mentions the tag further down is left as it is.
+  conv.onMessage(assistant("m2", [{ type: "tool_use", id: "ag2", name: "Agent", input: { description: "explain", prompt: "explain", subagent_type: "Explore" } }]));
+  conv.onMessage(result("ag2", [{ type: "text", text: "[Subagent hand-back] …" }], { tool_use_result: { status: "completed", agentId: "k2", content: [{ type: "text", text: "The note looks like <tools-used-before-summary>x</tools-used-before-summary>." }] } }));
+  assert.match(conv.items.at(-1).output, /^The note looks like <tools-used-before-summary>/);
+});
+
 test("the Task tools keep one list, and a turn that leaves work open says so", () => {
   const conv = new Conversation();
   conv.onMessage(assistant("m1", [{ type: "tool_use", id: "c1", name: "TaskCreate", input: { subject: "first" } }]));

@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.1.0] - 2026-11-16
+
+claude-tsp now keeps itself up to date, and watches whether Claude Code still
+speaks what it relies on.
+
+### Added
+
+- `/update`: updates claude-tsp itself (the Tern surface, not Claude Code). It
+  shows what every release since yours changed and installs the newest. A
+  clone of the repository is moved to the release tag and rebuilt; a copy
+  installed with `npm install -g` gets the release's tarball. A clone that is
+  not on `main`, or has changes of its own, is left alone and the command to
+  run is shown. A build that fails puts the version you had back.
+- A check for a newer release once a day, with a note among the composer's
+  facts when there is one. Nothing is installed until you say so. "Check for
+  updates" in `/settings` (or `CLAUDE_TSP_NO_UPDATE_CHECK=1`) turns it off. The
+  request goes to `api.github.com` with the version you run, nothing else.
+- "Restart now" after an update: the new version starts in the same pane on
+  the same conversation, and says what changed.
+- `claude-tsp --check-compat`: asks a Claude Code for every control request
+  the surface relies on and checks the fields it reads (`--bin <path>`,
+  `--json`). The session it starts has a config directory of its own: no
+  sign-in, no prompt, nothing of yours read or written.
+- `/doctor` has the same check behind "Check the surface".
+- A daily `claude-code-compat` workflow runs the check against the newest
+  Claude Code on npm and opens an issue when it fails.
+- `package.json` records the Claude Code range a release was checked with
+  (`claudeCode.minimum`, `claudeCode.tested`). A Claude Code older than the
+  minimum gets a warning at start.
+
+### Fixed
+
+- The welcome header fits a pane as narrow as a phone: the wordmark stays
+  beside the logo and the version line shortens instead of being clipped (#2).
+- A subagent's report no longer starts with Claude Code's
+  `<tools-used-before-summary>` note, in the card, the transcript sheet and
+  "Copy report" (#3).
+- `tools/verify.sh` runs the checkout it is in, not the installed copy.
+
 ## [1.0.0] - 2026-11-15
 
 A new claude-tsp, written from scratch in TypeScript on Tern's SDK. It replaces

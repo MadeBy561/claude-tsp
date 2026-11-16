@@ -5,8 +5,8 @@
  */
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, hostname, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Node as TernNode, type Key, type Session, type Surface, type TspEvent } from "@stencil-hq/tern";
@@ -31,7 +31,9 @@ import { installSplice } from "./splice.js";
 import { latestSession, listSessions, readEntries, type SessionRow } from "./sessions.js";
 import { collectStats, emptyStats, type Stats } from "./stats.js";
 import { addRule, CLAUDE_CHOICES, CLAUDE_SETTINGS, getKey, getNested, setNested, readEnv, removeRule, setKey, SCOPES, setEnv, settingsPath, validRule, type Behavior, type Scope } from "./settingsfile.js";
+import { checkBinary, formatReport, standing, supported } from "./compat.js";
 import { LOGO_SVG, stylesheet } from "./theme.js";
+import { applyUpdate, checkForUpdate, compareVersions, installOf, KIND_LABEL, loadUpdateState, manualUpdate, notesOf, saveUpdateState, updateKind, updateSteps, type Release } from "./update.js";
 import { dropTraces, takeTrace, traced, traceFile, untraced, usesTracing } from "./trace.js";
 import { Vim } from "./vim.js";
 import { dock, EDITOR_ID, errorBanner, MODES, rewindPanel, type Attachment, type DockActions, type DockState } from "./view/dock.js";
@@ -230,6 +232,7 @@ export class App {
   #statusLineAt = 0;
   #tools: string[] = [];
   #claudeVersion = "";
+  #versionNoted = false;
   #tip = TIPS[Math.floor(Math.random() * TIPS.length)] ?? "";
   #starting = true;
   #stopping = false;
@@ -244,6 +247,14 @@ export class App {
   #hideThinking = false;
   #showImages = true;
   #showUsage = false;
+  /** Whether GitHub is asked, once a day, for a newer claude-tsp. */
+  #updateCheck = true;
+  /** The releases newer than what runs, newest first. */
+  #updates: Release[] = [];
+  /** A version the user does not want to hear about again. */
+  #updateSkipped = "";
+  /** Set to start claude-tsp again once this surface has closed: the arguments to start it with. */
+  relaunch: string[] | null = null;
   #showCharts = true;
   #compactTools = false;
   #showTasks = true;
@@ -335,6 +346,7 @@ export class App {
     this.#applyStyles();
     this.render();
     void this.#open();
+    void this.#startupUpdate();
     for await (const input of this.#session) {
       try {
         if (input.type === "key") await this.#onKey(input.key);
@@ -414,6 +426,11 @@ export class App {
       this.#outputStyle = String(init.output_style ?? "default");
       this.#outputStyles = Array.isArray(init.available_output_styles) ? init.available_output_styles.map(String) : [];
       this.#claudeVersion = String(init.claude_code_version ?? "");
+      // Said once: below the oldest supported, requests the surface needs may be missing.
+      if (!this.#versionNoted && standing(this.#claudeVersion) === "older") {
+        this.#versionNoted = true;
+        this.toast(`Claude Code ${this.#claudeVersion} is older than claude-tsp supports (${supported().minimum} and up). Update Claude Code if something misbehaves`, "warning");
+      }
       if (init.current_permission_mode) this.conv.permissionMode = String(init.current_permission_mode);
       // This surface joins the session as one that draws what plugins render.
       this.#uiAttached = false;
@@ -1392,6 +1409,7 @@ export class App {
       modelName: this.#modelName(),
       modelIcon: this.#modelIcon(),
       effort: this.#thinkingOff ? "off" : this.conv.effort,
+      update: this.#updateOffer()?.version ?? "",
       reasoning: this.#levels().length > 1 || this.#thinkingOff,
       blocked: this.#blocked(),
       starting: this.#starting,
@@ -1408,6 +1426,7 @@ export class App {
       interrupt: () => void this.#interrupt(),
       pickModel: () => this.#pickModel(),
       cycleEffort: () => void this.#cycleEffort(),
+      showUpdate: () => void this.#showUpdate(false),
       cycleMode: () => void this.#cycleMode(),
       showContext: () => void this.#showContext(),
       showSession: () => void this.#showSession(),
@@ -2127,6 +2146,7 @@ export class App {
           { name: "bug", description: "Send feedback about Claude Code", icon: "info", hint: "[report]", run: args => void this.#feedback(args) },
           ] as Command[])),
       { name: "release-notes", description: "Show Claude Code's release notes", icon: "info", run: () => this.#releaseNotes() },
+      { name: "update", description: "Update claude-tsp, this Tern surface (not Claude Code): see what a newer release changes and install it", icon: "download", value: () => (this.#updateOffer() ? `${this.#updateOffer()!.version} available` : VERSION), run: () => void this.#showUpdate() },
       { name: "stats", description: "Show your usage statistics", icon: "gauge", run: () => this.#showStats() },
       { name: "upgrade", description: "Upgrade your plan", icon: "key", run: () => this.#upgrade() },
       { name: "background", description: "Send this session to the background and start a new one here", icon: "list", run: () => void this.#sendToBackground() },
@@ -2180,7 +2200,9 @@ export class App {
     let next: CompletionState | null = null;
     if (/^\/[^\s]*$/.test(text) && this.editor.cursor === text.length) {
       const query = text.slice(1);
-      const ranked = rank(query, this.#commands(), command => command.name).sort((a, b) => Number(b.item.name.startsWith(query)) - Number(a.item.name.startsWith(query)));
+      // A name typed in full comes first, then the names that start with what was typed: `/update` is never `/update-config`.
+      const order = (name: string): number => (name === query ? 2 : name.startsWith(query) ? 1 : 0);
+      const ranked = rank(query, this.#commands(), command => command.name).sort((a, b) => order(b.item.name) - order(a.item.name));
       const items = ranked.slice(0, 100).map(({ item }) => ({
         id: item.name,
         label: item.hint ? `${item.name} ${item.hint}` : item.name,
@@ -4267,7 +4289,27 @@ export class App {
           .replace(/^\s*Claude Code doctor\s*\n/, "")
           .split("\n")
           .map((line, index) => (line.trim() ? h("text", { key: `l${index}`, wrap: "word", spans: [s(line, /^[A-Z][A-Za-z ]+$/.test(line.trim()) ? "strong" : "mono")] }) : h("spacer", { key: `l${index}`, size: "xs" }))),
-      extra: () => [h("button", { key: "full", text: "Full checkup in Claude Code", size: "md", onClick: () => (this.#closeSheet(), void this.#tui("/doctor")) }), h("button", { key: "copy", text: "Copy", size: "md", onClick: () => this.copy(output, "Report") })],
+      extra: () => [
+        h("button", { key: "compat", text: "Check the surface", size: "md", title: "Ask this Claude Code for everything claude-tsp relies on. No prompt is sent", onClick: () => void compat() }),
+        h("button", { key: "full", text: "Full checkup in Claude Code", size: "md", onClick: () => (this.#closeSheet(), void this.#tui("/doctor")) }),
+        h("button", { key: "copy", text: "Copy", size: "md", onClick: () => this.copy(output, "Report") }),
+      ],
+    };
+    // Whether this Claude Code still answers what the surface asks of it: a session of its own, no prompt, nothing of the user's read.
+    const compat = async (): Promise<void> => {
+      output = "Checking what claude-tsp relies on…";
+      // The report's lines are wider than the doctor's own.
+      if (this.#sheet?.id === "doctor") this.#sheet.size = "lg";
+      this.schedule();
+      const dir = mkdtempSync(join(tmpdir(), "claude-tsp-check-"));
+      try {
+        output = `claude-tsp and this Claude Code\n${formatReport(await checkBinary(stockPath(), dir), supported(), VERSION)}`;
+      } catch (error) {
+        output = `claude-tsp and this Claude Code\nThe check could not run: ${(error as Error).message}`;
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      this.schedule();
     };
     execFile(stockPath(), ["doctor"], { cwd: this.#cwd, timeout: 90_000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       output = (stdout || stderr || error?.message || "No output").trim();
@@ -4625,6 +4667,136 @@ export class App {
     const id = this.conv.sessionId;
     const stored = id && existsSync(sessionFile(this.#cwd, id));
     await this.#restart(stored ? { resume: id } : { sessionId: randomUUID() }, stored ? sessionFile(this.#cwd, id) : null);
+  }
+
+  // ───────────────────────────────────────────────────────────── updates of claude-tsp itself
+
+  /** The newest release worth offering: newer than what runs, and not one the user skipped. */
+  #updateOffer(): Release | null {
+    const newest = this.#updates[0];
+    return newest && newest.version !== this.#updateSkipped ? newest : null;
+  }
+
+  /** At start: says so when this is the first run of a newer version, and looks for a newer one still. */
+  async #startupUpdate(): Promise<void> {
+    const dir = stateDir();
+    const state = loadUpdateState(dir);
+    this.#updateSkipped = state.skipped ?? "";
+    if (state.ran !== VERSION) {
+      saveUpdateState(dir, { ...state, ran: VERSION });
+      if (state.ran && compareVersions(VERSION, state.ran) > 0) this.toast(`Updated to claude-tsp ${VERSION}`, "success", { act: "notes", label: "What's new", run: () => void this.#showUpdate(false) });
+    }
+    if (!this.#updateCheck || process.env.CLAUDE_TSP_NO_UPDATE_CHECK === "1") return;
+    const result = await checkForUpdate(dir, VERSION);
+    this.#updates = result.newer;
+    const offer = this.#updateOffer();
+    // Said once a day, when GitHub was asked; between checks the composer's own note stands.
+    if (offer && result.fresh) this.toast(`claude-tsp ${offer.version} is out: ${KIND_LABEL[updateKind(VERSION, offer.version) ?? "patch"]}`, "info", { act: "update", label: "See what's new", run: () => void this.#showUpdate(false) });
+    this.schedule();
+  }
+
+  /** `/update`: what the newer releases change, and a button that installs the newest. */
+  async #showUpdate(force = true): Promise<void> {
+    const dir = stateDir();
+    const install = installOf();
+    let phase: "checking" | "ready" | "applying" | "done" | "failed" = "checking";
+    let progress = "";
+    let failure = "";
+    let trouble = "";
+    let newer: Release[] = this.#updates;
+    const current = (): Release | undefined => loadUpdateState(dir).releases.find(release => release.version === VERSION);
+    const body = (): (Node | null)[] => {
+      const newest = newer[0];
+      if (phase === "checking") return [h("row", { key: "wait", gap: "sm", align: "center" }, [h("spinner", { key: "spin", style: "dots" }), h("text", { key: "text", spans: [s("Asking GitHub for the releases…", "muted")] })])];
+      if (phase === "applying") return [h("row", { key: "wait", gap: "sm", align: "center" }, [h("spinner", { key: "spin", style: "dots" }), h("text", { key: "text", spans: [s(`${progress || "Updating"}…`, "strong")] })]), h("text", { key: "note", wrap: "word", spans: [s("Keep this pane open until it finishes. Your session is not touched.", "muted")] })];
+      if (phase === "done") return [h("text", { key: "done", wrap: "word", spans: [s(`claude-tsp ${newest?.version ?? ""} is installed.`, "strong success")] }), h("text", { key: "note", wrap: "word", spans: [s("This pane still runs the version it started with. Restart to use the new one: the conversation comes back as it is.", "muted")] })];
+      if (phase === "failed")
+        return [h("text", { key: "failed", wrap: "word", spans: [s("The update did not go through.", "strong error")] }), h("code", { key: "why", wrap: true, text: failure }), newest ? h("text", { key: "manual", wrap: "word", spans: [s("By hand: ", "muted"), s(manualUpdate(install, newest), "mono")] }) : null];
+      if (!newest) {
+        const mine = current();
+        return [
+          h("text", { key: "newest", wrap: "word", spans: [s(`You have the newest claude-tsp, ${VERSION}.`, "strong")] }),
+          trouble ? h("text", { key: "trouble", wrap: "word", spans: [s(`GitHub could not be asked just now (${trouble}); this is what was last known.`, "warning")] }) : null,
+          mine?.notes ? h("md", { key: "notes", text: `## In this version
+
+${notesOf([mine])}` }) : null,
+        ];
+      }
+      const kind = updateKind(VERSION, newest.version) ?? "patch";
+      const how =
+        install.kind === "git"
+          ? "This copy is a clone of the repository: updating moves it to the release and rebuilds it. A clone with changes of its own is left alone."
+          : install.kind === "npm"
+            ? "npm installs the release over this copy."
+            : "This copy is updated by hand:";
+      return [
+        h("text", { key: "offer", wrap: "word", spans: [s(`claude-tsp ${newest.version}`, "strong accent"), s(` is out: ${KIND_LABEL[kind]}. You have ${VERSION}.`)] }),
+        trouble ? h("text", { key: "trouble", wrap: "word", spans: [s(`GitHub could not be asked just now (${trouble}); this is what was last known.`, "warning")] }) : null,
+        h("text", { key: "how", wrap: "word", spans: [s(how, "muted")] }),
+        updateSteps(install, newest) ? null : h("code", { key: "cmd", wrap: true, text: manualUpdate(install, newest) }),
+        h("md", { key: "notes", text: notesOf(newer) }),
+      ];
+    };
+    const apply = async (): Promise<void> => {
+      const newest = newer[0];
+      if (!newest || phase !== "ready") return;
+      phase = "applying";
+      this.schedule();
+      const outcome = await applyUpdate(install, newest, label => {
+        progress = label;
+        this.schedule();
+      });
+      if (outcome.ok) phase = "done";
+      else {
+        phase = "failed";
+        failure = `${outcome.error ?? "Unknown error"}${outcome.restored ? "\n\nThe version you had was put back." : ""}`;
+      }
+      this.schedule();
+    };
+    this.#sheet = {
+      id: "update",
+      head: "claude-tsp update  ·  the Tern surface, not Claude Code",
+      size: "lg",
+      body,
+      extra: () => {
+        const newest = newer[0];
+        if (phase === "done") return [h("button", { key: "restart", text: "Restart now", size: "md", variant: "primary", onClick: () => void this.#relaunch() })];
+        if (phase === "failed") return [h("button", { key: "copy", text: "Copy the error", size: "md", onClick: () => this.copy(failure, "Error") })];
+        if (phase !== "ready" || !newest) return [];
+        return [
+          h("button", { key: "skip", text: "Skip this version", size: "md", title: "Do not offer this version again", onClick: () => this.#skipUpdate(newest.version) }),
+          h("button", { key: "page", text: "Copy link", size: "md", onClick: () => this.copy(newest.url, "Link") }),
+          updateSteps(install, newest) ? h("button", { key: "apply", text: `Update to ${newest.version}`, size: "md", variant: "primary", onClick: () => void apply() }) : h("button", { key: "cmd", text: "Copy the command", size: "md", variant: "primary", onClick: () => this.copy(manualUpdate(install, newest), "Command") }),
+        ];
+      },
+    };
+    this.schedule();
+    const result = await checkForUpdate(dir, VERSION, { force });
+    newer = result.newer;
+    this.#updates = result.newer;
+    trouble = result.error ?? "";
+    // The sheet may have been closed, or another opened, while GitHub answered.
+    if (phase === "checking") phase = "ready";
+    this.schedule();
+  }
+
+  #skipUpdate(version: string): void {
+    const dir = stateDir();
+    saveUpdateState(dir, { ...loadUpdateState(dir), skipped: version });
+    this.#updateSkipped = version;
+    this.#closeSheet();
+    this.toast(`claude-tsp ${version} will not be offered again. /update still shows it`);
+  }
+
+  /** Ends this surface and starts claude-tsp again on the same conversation: after an update, on the new code. */
+  async #relaunch(): Promise<void> {
+    if (this.conv.busy) await this.#interrupt();
+    const id = this.conv.sessionId;
+    const stored = Boolean(id && existsSync(sessionFile(this.#cwd, id)));
+    this.relaunch = spawnArgs(this.#launch, { model: this.#modelValue || null, permissionMode: this.conv.permissionMode, effort: this.#local() ? null : this.conv.effort || null, ...(stored ? { resume: id } : {}) });
+    // The new surface draws the conversation again: this one leaves nothing behind in the pane.
+    await this.#surface.close({ keep: false }).catch(() => undefined);
+    await this.quit();
   }
 
   /** `/upgrade`: the page where the plan is changed. */
@@ -5452,6 +5624,12 @@ export class App {
         ],
       },
       {
+        id: "updates",
+        title: "Updates",
+        page: "display",
+        rows: [{ id: "update-check", label: "Check for updates", hint: "Ask GitHub once a day whether a newer claude-tsp is out. Nothing is installed until you say so  /update", changed: !this.#updateCheck, defaultLabel: "on", control: { k: "switch", on: this.#updateCheck } }],
+      },
+      {
         id: "transcript",
         title: "Transcript",
         page: "display",
@@ -5634,6 +5812,11 @@ export class App {
           this.#showCharts = value === null ? true : Boolean(value);
           this.#foldRev += 1;
           break;
+        case "update-check":
+          this.#updateCheck = value === null ? true : Boolean(value);
+          if (!this.#updateCheck) this.#updates = [];
+          else void this.#startupUpdate();
+          break;
         case "show-usage":
           this.#showUsage = Boolean(value);
           this.#foldRev += 1;
@@ -5660,6 +5843,7 @@ export class App {
       this.#hideThinking = stored.hideThinking === true;
       this.#showImages = stored.showImages !== false;
       this.#showUsage = stored.showUsage === true;
+      this.#updateCheck = stored.updateCheck !== false;
       this.#vimKeys = stored.vimKeys === true;
       this.#showCharts = stored.showCharts !== false;
       this.#compactTools = stored.compactTools === true;
@@ -5680,7 +5864,7 @@ export class App {
     try {
       writeFileSync(
         this.#displayPath(),
-        JSON.stringify({ expandAll: this.#expandAll, hideThinking: this.#hideThinking, showImages: this.#showImages, showUsage: this.#showUsage, vimKeys: this.#vimKeys, showCharts: this.#showCharts, compactTools: this.#compactTools, showTasks: this.#showTasks, clay: this.#clay, suggestions: this.#suggestions, statusLine: this.#statusLine, traceCalls: this.#traceCalls, autoCompact: this.#autoCompact, autoRetry: this.#autoRetry, steer: this.#steer }),
+        JSON.stringify({ expandAll: this.#expandAll, hideThinking: this.#hideThinking, showImages: this.#showImages, showUsage: this.#showUsage, updateCheck: this.#updateCheck, vimKeys: this.#vimKeys, showCharts: this.#showCharts, compactTools: this.#compactTools, showTasks: this.#showTasks, clay: this.#clay, suggestions: this.#suggestions, statusLine: this.#statusLine, traceCalls: this.#traceCalls, autoCompact: this.#autoCompact, autoRetry: this.#autoRetry, steer: this.#steer }),
         { mode: 0o600 },
       );
     } catch {

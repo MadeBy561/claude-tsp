@@ -68,5 +68,8 @@ export function stylesheet(clay: boolean): string {
 [data-role="claude.plan"] { border-left: 2px solid var(--claude); padding-left: 0.9em; }
 [data-role="claude.approval.preview"] { border-radius: var(--r-ctl, 8px); }
 [data-role="claude.welcome.account"] { opacity: 0.85; }
+/* A narrow pane: the lockup wraps and Tern clips what wrapped, so the mark gives way instead and its small line shortens. */
+[data-role="omp.welcome.mark"] { min-width: 0; max-width: calc(100% - 66px); }
+[data-role="omp.welcome.version"] { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 `;
 }

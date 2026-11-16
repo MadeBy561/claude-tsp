@@ -1,0 +1,92 @@
+name: claude-code-compat
+
+# Whether the newest Claude Code still answers what claude-tsp asks of it.
+#
+# claude-tsp drives Claude Code through control requests, several of them not
+# in the published SDK, so a Claude Code update can break a feature without
+# anything changing here. Once a day this installs the newest Claude Code and
+# runs `claude-tsp --check-compat` against it: a session with no sign-in and
+# no prompt, asked for each request the surface uses. A failure opens an issue
+# labelled `claude-code-compat`, once per Claude Code version.
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Claude Code version to check (an npm version or tag)"
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: |
+          npm install --prefix "$RUNNER_TEMP/cc" --no-audit --no-fund "@anthropic-ai/claude-code@${{ inputs.version || 'latest' }}"
+          "$RUNNER_TEMP/cc/node_modules/.bin/claude" --version
+
+      - name: Check
+        id: check
+        run: |
+          set +e
+          BIN="$RUNNER_TEMP/cc/node_modules/.bin/claude"
+          node bin/claude-tsp --check-compat --bin "$BIN" > report.txt
+          CODE=$?
+          node bin/claude-tsp --check-compat --json --bin "$BIN" > report.json
+          cat report.txt
+          { echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "try { require('./report.json').claudeCode || 'unknown' } catch { 'unknown' }")" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when a check failed
+        if: steps.check.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CC_VERSION: ${{ steps.check.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Claude Code $CC_VERSION: compatibility check failed"
+          OPEN=$(gh issue list --repo "$REPO" --state open --label claude-code-compat --search "\"Claude Code $CC_VERSION\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$OPEN" ]; then
+            echo "Issue #$OPEN is already open for Claude Code $CC_VERSION."
+            exit 0
+          fi
+          {
+            echo "The daily check found that Claude Code $CC_VERSION no longer answers something claude-tsp relies on."
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+            echo
+            echo "Each failed line names the request and what the surface uses it for. Reproduce with:"
+            echo
+            echo '```sh'
+            echo "npm install --prefix /tmp/cc @anthropic-ai/claude-code@$CC_VERSION"
+            echo "claude-tsp --check-compat --bin /tmp/cc/node_modules/.bin/claude"
+            echo '```'
+            echo
+            echo "Run: $RUN_URL"
+          } > body.md
+          gh issue create --repo "$REPO" --title "$TITLE" --label bug --label claude-code-compat --body-file body.md
+
+      - name: Fail the run when the check did not pass
+        if: steps.check.outputs.code != '0'
+        run: |
+          echo "claude-tsp --check-compat exited ${{ steps.check.outputs.code }} (1: a check failed, 2: Claude Code could not be started)."
+          exit 1

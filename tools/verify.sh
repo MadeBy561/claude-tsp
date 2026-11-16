@@ -421,4 +421,34 @@ grep -q '"CLAUDE_CODE_USE_BEDROCK": "1"' $PLUG/settings.json 2>/dev/null && ! gr
 "$D/serve.sh" stop $S
 rm -rf $GHD $PLUG $MARKET /tmp/ctsp-verify-traffic.json $DEMO/.claude/settings.local.json
 
+echo "== updates of claude-tsp, and the Claude Code check"
+# Clicks the button whose text starts with LABEL.
+press() { local at; at=$(ctl tree 'button' 2>/dev/null | python3 -c 'import json,sys
+want=sys.argv[1]
+for n in json.load(sys.stdin).get("nodes",[]):
+    if str(n.get("text","")).startswith(want):
+        r=n["rect"]; print(int(r[0]+r[2]/2), int(r[1]+r[3]/2)); break' "$1"); [ -n "$at" ] && ctl click $at >/dev/null; }
+# A release feed of its own, so the check never depends on what GitHub has.
+FEED=/tmp/ctsp-verify-feed; rm -rf $FEED; mkdir -p $FEED
+printf '[{"tag_name":"v99.0.0","html_url":"https://example.invalid/v99.0.0","published_at":"2030-01-01T00:00:00Z","body":"## [99.0.0]\\n\\n### Added\\n- A verify-only release.","assets":[]}]' > $FEED/releases.json
+( cd $FEED && exec python3 -m http.server 18532 --bind 127.0.0.1 >/dev/null 2>&1 ) & FEEDPID=$!
+rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/update.json"
+start "CLAUDE_TSP_NO_UPDATE_CHECK=0 CLAUDE_TSP_RELEASES_URL=http://127.0.0.1:18532/releases.json $OUTSIDE claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
+until_ '[data-role="claude.status.update"]' 20
+says "a newer release shows among the composer's facts" '[data-role="claude.status.update"]' "99.0.0"
+cmd /update 4
+seen "/update shows what the release changes" "A verify-only release"
+seen "/update says it is the surface it updates, not Claude Code" "not Claude Code"
+press "Skip this version"; sleep 2
+hasnt "a skipped version is not offered again" '[data-role="claude.status.update"]'
+cmd /doctor 6
+press "Check the surface"
+seen "/doctor's check of the surface passes on this Claude Code" "checks passed." 90
+ctl key Escape >/dev/null; sleep 1
+[ -s $TRACE ] && ok "no TSP errors (update run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (update run)" 1
+"$D/serve.sh" stop $S
+kill $FEEDPID 2>/dev/null; rm -rf $FEED; rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/update.json"
+$OUTSIDE node bin/claude-tsp --check-compat > /tmp/ctsp-verify-compat.txt 2>&1 && ok "claude-tsp --check-compat passes from a shell" 1 || ok "claude-tsp --check-compat passes from a shell" 0 "$(tail -3 /tmp/ctsp-verify-compat.txt | tr '\n' ' ')"
+rm -f /tmp/ctsp-verify-compat.txt
+
 echo; echo "$pass passed, $fail failed"

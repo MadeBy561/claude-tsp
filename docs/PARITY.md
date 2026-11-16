@@ -194,4 +194,4 @@ claude.ai), and so turns under `~/.claude`'s own sign-in, which is expired on
 this machine (`claude -p` fails the same way; `/login` in `claude-tsp` is the
 fix).
 
-`npm test`: 65 tests.
+`npm test`: 78 tests.

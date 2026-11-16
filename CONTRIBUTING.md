@@ -27,7 +27,24 @@ for the native surface.
    - major for breaking changes.
 3. Add the same version section to `CHANGELOG.md`.
 4. Run `npm test`.
-5. Open a PR.
+5. Open a PR and label it.
+
+Every issue and PR carries labels from this set, and no others:
+
+| Label | For |
+|---|---|
+| `bug` | Something works wrong |
+| `visual` | Works, but looks wrong on screen |
+| `enhancement` | A new feature or an improvement |
+| `documentation` | README, docs or changelog only |
+| `chore` | Build, CI, tests, dependencies, cleanup |
+| `release` | The version bump and changelog of a release |
+| `claude-code-compat` | Caused by a Claude Code update or protocol change |
+| `claude-pi` | Only affects the `claude-pi-tsp` profile |
+| `tern` | Needs a change or an answer on Tern's side |
+| `needs-repro` | Not reproduced yet |
+| `duplicate` | Already tracked elsewhere |
+| `wontfix` | Will not be worked on |
 
 `version-check` fails when a PR does not raise `package.json` above the base
 branch. That is intentional: every merged improvement gets a release.
@@ -42,6 +59,12 @@ Merging a PR with a higher `version` to `main` makes the release workflow:
 4. attach the `npm pack` tarball.
 
 Do not edit a released tag. Cut a new version instead.
+
+A release that was checked against a newer Claude Code says so: set
+`claudeCode.tested` in `package.json` to the newest version that both
+`claude-tsp --check-compat` and `tools/verify.sh` passed with. The
+`claude-code-compat` workflow runs the first of those every day against the
+newest Claude Code and opens an issue when it fails.
 
 ## Scope
 

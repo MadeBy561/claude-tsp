@@ -886,7 +886,9 @@ export class Conversation {
 
   #settleAgent(item: Item, details: Record<string, any>, text: string): void {
     const report = contentText(details.content) || text.replace(/^[\s\S]*?\[Subagent hand-back\][^\n]*\n(?:[^\n]*\n)*?\n/, "");
-    if (report.trim()) item.output = report.replace(/^ {2}/gm, "").trim();
+    // The list of tools Claude Code puts before a subagent's summary is a note for the model, not part of the report.
+    const clean = report.replace(/^\s*<tools-used-before-summary>[\s\S]*?<\/tools-used-before-summary>\s*/, "");
+    if (clean.trim()) item.output = clean.replace(/^ {2}/gm, "").trim();
     item.stats = {
       tools: details.totalToolUseCount ?? item.stats?.tools ?? 0,
       tokens: details.totalTokens ?? item.stats?.tokens ?? 0,

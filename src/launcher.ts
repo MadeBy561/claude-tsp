@@ -23,12 +23,32 @@ function runStock(args: string[]): Promise<number> {
   });
 }
 
+/** Starts claude-tsp again in this pane (the code on disk, which an update may have changed) and waits for it. */
+function runSelf(args: string[]): Promise<number> {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [process.argv[1]!, ...args], { stdio: "inherit" });
+    child.on("error", error => {
+      process.stderr.write(`claude-tsp: could not restart (${error.message}); run it again\n`);
+      resolve(1);
+    });
+    child.on("exit", (code, signal) => {
+      if (signal) process.kill(process.pid, signal);
+      else resolve(code ?? 0);
+    });
+  });
+}
+
 /** Whether the pane is Tern's own, so a surface can be opened before Tern has answered. */
 function inTern(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.TERM_PROGRAM === "tern" && env.TERN_TSP !== "0" && !env.TMUX && !env.STY && !env.ZELLIJ;
 }
 
 export async function main(args: string[]): Promise<number> {
+  // Not a session: whether this Claude Code still answers what the surface asks of it.
+  if (args.includes("--check-compat")) {
+    const [{ compatCli }, { VERSION }] = await Promise.all([import("./compat.js"), import("./app.js")]);
+    return compatCli(args, stockPath(), VERSION);
+  }
   const launch = parseArgs(args);
   if (!launch.native || !process.stdin.isTTY || !process.stdout.isTTY || process.env.CLAUDE_TSP_STOCK === "1") return runStock(args);
   const { VERSION, App } = await import("./app.js");
@@ -50,9 +70,12 @@ export async function main(args: string[]): Promise<number> {
     if (!session) return runStock(args);
     app = start(session);
   }
+  let code: number;
   try {
-    return await app.run();
+    code = await app.run();
   } finally {
     await app.quit();
   }
+  // After an update: the same command again, on the code now installed.
+  return app.relaunch ? runSelf(app.relaunch) : code;
 }
