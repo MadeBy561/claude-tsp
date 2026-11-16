@@ -28,7 +28,7 @@ each known name into it) has an entry here or is run by Claude Code itself.
 | Tool permissions | ✅ | panel with native preview, "don't ask again" rules from Claude Code's own suggestions, deny with a note |
 | Permission modes (Shift+Tab) | ✅ | Ask, Accept edits, Plan, Auto, Don't ask; Bypass when allowed at launch |
 | MCP tools, MCP elicitation | ✅ | cards; link and form dialogs |
-| `/model`, `/effort` | ✅ | pickers; chip in the composer |
+| `/model`, `/effort` | ✅ | the model picker; the effort dialog laid out as Claude Code's (track, levels, Ultracode on Tab, session-only on S); chips in the composer |
 | `/resume`, `--continue`, `--resume [id or name]` | ✅ | picker across projects with preview, fork, delete |
 | `/clear`, `/compact`, `/rename`, `/export`, `/add-dir` | ✅ | |
 | `/rewind` (Esc Esc) | ✅ | page with the point marked; conversation, files, or both |
@@ -85,7 +85,7 @@ each known name into it) has an entry here or is run by Claude Code itself.
 | Sparse prompt, tool set, plugin, both accounts | ✅ | `claude-pi-tsp` passes the toolkit's own arguments; `CLAUDE_PI_CONFIG_DIR` as before |
 | Local and ChatGPT models under their own names | ✅ | picker rows and the composer chip, with the maker's logo |
 | Real context windows for routed models | ✅ | `local.json`'s window; 272K for the ChatGPT rows |
-| Local model effort (`/deepseek-effort`) | ✅ | the effort chip and picker drive the plugin's command |
+| Local model effort (`/deepseek-effort`) | ✅ | the effort chip and dialog drive the plugin's command |
 | Cache figures (`$.ui.status`) | ✅ | status segment |
 | Subagent model in the task name | ✅ | shown on the agent card |
 | Plugin commands (`/codex-login`, `/pi-status`, …) | ✅ | run by the plugin; output in the transcript |
@@ -99,7 +99,7 @@ each known name into it) has an entry here or is run by Claude Code itself.
 | Inline `omp.session` surface, block-wise reconciliation, settle | ✅ | same core as pi-tsp |
 | Welcome lockup, tips | ✅ | Claude's mark and name |
 | Tool cards, read groups, compact tools, expand all, hide thinking | ✅ | |
-| Subagent cards and transcript sheet | ✅ | live, where pi-tsp reads files |
+| Subagent cards, the agents pane and Full view | ✅ | live, where pi-tsp reads files; every agent at once in the pane |
 | Approval panel, field dialog, pickers, sheets, settings window, toasts | ✅ | |
 | Context meter, model chip, effort chip, cost, working row, queue rows | ✅ | plus the mode pill |
 | Rewind page, fork picker, outline, copy picker, history search | ✅ | |
@@ -151,8 +151,8 @@ Beyond `tools/verify.sh`, these were run once by hand with the account's owner (
 ## Verification
 
 `tools/verify.sh` drives both commands in headless Tern and checks the live
-document: 163 checks, each a PASS or FAIL line. The last full run is kept in
-`docs/VERIFY.txt` (2026-11-16, Tern 0.9.20): **163 passed, 0 failed**.
+document: 180 checks, each a PASS or FAIL line. The last full run is kept in
+`docs/VERIFY.txt` (2026-11-16, Tern 0.9.20): **180 passed, 0 failed**.
 `docs/OMP-ROWS.md` lists each of omp's 104 rows with the check or test that
 shows it.
 
@@ -194,4 +194,4 @@ claude.ai), and so turns under `~/.claude`'s own sign-in, which is expired on
 this machine (`claude -p` fails the same way; `/login` in `claude-tsp` is the
 fix).
 
-`npm test`: 78 tests.
+`npm test`: 87 tests.

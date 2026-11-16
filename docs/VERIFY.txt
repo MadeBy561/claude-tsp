@@ -16,7 +16,15 @@ PASS  a question panel
 PASS  the answer is recorded on the card
 PASS  a subagent card
 PASS  the task list above the composer
-PASS  the subagent transcript sheet
+PASS  the composer counts the session's subagents
+PASS  Alt+A opens the agents pane
+PASS  one agent in the session opens on its conversation
+PASS  the pane names what the agent was asked
+PASS  Full view opens the conversation over the whole pane
+PASS  the pane steps aside while Full view is open
+PASS  back from one agent is the overview, a tile for each
+PASS  Alt+A hides the pane
+PASS  an agent chosen in /agents opens in the pane
 PASS  a !command row
 PASS  the shell output reached the model
 PASS  /inspect opens the command in the inspector
@@ -24,6 +32,10 @@ PASS  a !command is traced, so its run can be replayed
 PASS  /btw answers from the conversation
 PASS  Alt+T turns thinking off
 PASS  Alt+T turns it back on
+PASS  /effort opens the effort dialog
+PASS  a local model has its own three levels on the track
+PASS  and no Ultracode switch
+PASS  Esc closes the dialog and changes nothing
 PASS  /model opens and closes
 PASS  /mode opens and closes
 PASS  /context opens and closes
@@ -81,6 +93,11 @@ PASS  no TSP errors (claude-pi run)
 == claude-tsp, stock binary and prompt, Haiku
 PASS  the stock profile is named Claude Code
 PASS  a Claude model is named
+PASS  a Claude model has Claude Code's five levels
+PASS  Tab turns Ultracode on in the dialog and S applies it to the session
+PASS  Ultracode stays on when the level changes
+PASS  Ultracode is put back when the surface restarts Claude Code's process
+PASS  /effort ultracode off turns it off
 PASS  plan mode ends in a plan approval
 PASS  the plan approval offers accept-edits
 PASS  approving the plan switches to Accept edits
@@ -169,4 +186,4 @@ PASS  /doctor's check of the surface passes on this Claude Code
 PASS  no TSP errors (update run)
 PASS  claude-tsp --check-compat passes from a shell
 
-163 passed, 0 failed
+180 passed, 0 failed

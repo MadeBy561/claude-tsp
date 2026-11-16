@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.2.0] - 2026-11-16
+
+Subagents get a pane of their own, and `/effort` becomes the dialog Claude
+Code draws, with Ultracode.
+
+### Added
+
+- **The agents pane.** A chip in the composer counts the session's subagents;
+  clicking it, Alt+A, an agent's card or `/agents` opens the pane.
+  - The overview shows every agent at once: the ones at work with their last
+    steps live, the finished ones with the first lines of their report.
+  - A tile opens that agent's own conversation, which follows the newest
+    output while the agent works. Back and previous/next stay pinned above it;
+    Stop, Copy report and Full view sit below.
+  - Where it goes follows the width: beside the conversation on a desktop or
+    a tablet (the conversation moves over), a drawer from the bottom on a
+    phone, which steps aside while an approval or a question is open.
+- **The effort dialog.** `/effort` opens a track from Faster to Smarter with
+  the model's levels under it, laid out as Claude Code's own. ←/→ move, Enter
+  confirms and saves the level as the default for new sessions, S keeps it to
+  this session, Esc cancels. `max` is never saved as a default.
+- **Ultracode.** Tab in the effort dialog, or `/effort ultracode on|off`,
+  switches it for the session, and a chip in the composer shows it is on. It
+  works with every effort level and stays on when the level changes.
+- `/effort auto` leaves the level to the model.
+- A local model (claude-pi) gets the same dialog with its own levels.
+
+### Changed
+
+- Full view of a subagent takes the whole pane and the agents pane steps
+  aside while it is open.
+- A subagent's prompt no longer offers rewind and edit: they act on the main
+  conversation only.
+- On a pane about a phone wide, the composer drops the tokens-per-second
+  figure so the model, mode and agents chips keep their labels.
+
 ## [1.1.0] - 2026-11-16
 
 claude-tsp now keeps itself up to date, and watches whether Claude Code still

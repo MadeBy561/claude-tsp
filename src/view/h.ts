@@ -48,6 +48,8 @@ export interface ViewCtx {
   showUsage: boolean;
   /** How each command pane is shown, by item id; absent is the default. */
   shell: ReadonlyMap<string, ShellPrefs>;
+  /** A subagent's conversation: its messages cannot be rewound to or edited. */
+  sub?: boolean;
   /** Per-node fold state the user set, by item id. */
   fold: ReadonlyMap<string, boolean>;
   /** Bumped when `fold`, `expandAll`, `hideThinking` or `showImages` change. */

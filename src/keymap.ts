@@ -29,6 +29,7 @@ export const DEFAULT_KEYS = {
   "app.effort.decrease": ["shift+down"],
   "app.fast.toggle": ["alt+o"],
   "app.agents.kill": ["alt+x"],
+  "app.agents.pane": ["alt+a"],
   "app.tasks.toggle": ["ctrl+t"],
   "app.background": ["ctrl+b"],
   "app.stash": ["ctrl+s"],

@@ -434,3 +434,50 @@ export function prefsNode(view: PrefsView, on: { change(row: string, value: unkn
     onSelect: (event: SelectEvent) => on.select(event.item),
   });
 }
+
+export interface EffortView {
+  levels: string[];
+  /** The level under the thumb. */
+  at: number;
+  /** The level in force, for the head. */
+  current: string;
+  /** Ultracode as the dialog has it; null when the model takes none. */
+  ultracode: boolean | null;
+  /** What the level under the thumb means. */
+  detail: string;
+  warning?: string;
+  /** Confirming also makes the level the default for new sessions (a session-only choice is offered beside it). */
+  saves: boolean;
+  /** Say which keys do what: left out where there is likely no keyboard and the room is short. */
+  keys: boolean;
+}
+
+/**
+ * The effort dialog, laid out as Claude Code's own: a track from faster to
+ * smarter with the levels under it, ultracode as a switch beside them (Tab),
+ * and nothing applied until it is confirmed.
+ */
+export function effortDialog(view: EffortView, on: { level(index: number): void; ultracode(on: boolean): void; confirm(): void; session(): void; close(): void }): Node {
+  const foot = h("row", { role: "omp.actions", gap: "sm", align: "center" }, [
+    view.keys ? h("text", { key: "keys", role: "claude.effort.keys", wrap: "none", spans: [s(`←/→ adjust${view.ultracode === null ? "" : "  ·  Tab ultracode"}`, "dim")] }) : null,
+    h("spacer", { key: "fill", grow: 1 }),
+    actionButton("Cancel", "close", ["escape"], on.close),
+    view.saves ? actionButton("This session only", "session", ["s"], on.session, undefined, "Use it for this session and leave your default as it is  s") : null,
+    actionButton("Confirm", "confirm", ["enter"], on.confirm, "primary", view.saves ? "Use it now and for new sessions  enter" : "Use it for this session  enter"),
+  ]);
+  return h("overlay", { key: "effort", anchor: "center", modal: true, size: "md", head: "Effort", icon: "gauge", meta: view.current ? `now ${view.current}` : "", role: "omp.overlay.effort", foot }, [
+    h("row", { key: "ends", role: "claude.effort.ends", align: "center" }, [h("text", { key: "0", wrap: "none", spans: [s("Faster", "muted")] }), h("spacer", { key: "fill", grow: 1 }), h("text", { key: "1", wrap: "none", spans: [s("Smarter", "muted")] })]),
+    h("slider", { key: "level", role: "claude.effort.slider", value: view.at, min: 0, max: Math.max(1, view.levels.length - 1), step: 1, ticks: true, aria: "Effort level", onChange: (event: ChangeEvent) => on.level(Math.round(Number(event.value))) }),
+    h(
+      "row",
+      { key: "labels", role: "claude.effort.labels", justify: "between", align: "center" },
+      view.levels.map((name, index) => h("text", { key: name, role: "claude.effort.label", wrap: "none", ...(index === view.at ? { tone: "accent" } : {}), title: `Set to ${name}`, spans: [s(name, index === view.at ? "strong accent" : "muted")], onClick: () => on.level(index) })),
+    ),
+    h("text", { key: "detail", role: "claude.effort.detail", wrap: "word", spans: [s(view.detail)] }),
+    view.warning ? h("text", { key: "warning", wrap: "word", spans: [s(view.warning, "warning")] }) : null,
+    view.ultracode === null ? null : h("rule", { key: "rule" }),
+    view.ultracode === null
+      ? null
+      : h("switch", { key: "ultra", role: "claude.effort.ultracode", label: "Ultracode", hint: `Dynamic workflows on every task, for this session${view.keys ? ".  Tab to toggle" : ""}`, on: view.ultracode, onChange: (event: ChangeEvent) => on.ultracode(event.on ?? event.value === true) }),
+  ]);
+}

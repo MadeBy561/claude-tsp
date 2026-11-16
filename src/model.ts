@@ -251,6 +251,10 @@ export class Conversation {
   model = "";
   permissionMode = "default";
   effort = "";
+  /** Ultracode: a workflow is written and run for every substantial task. */
+  ultracode = false;
+  /** Whether the model in use can take ultracode. */
+  ultracodeAvailable = false;
   sessionId = "";
   sessionName = "";
   cost = 0;

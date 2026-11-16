@@ -3,7 +3,7 @@
  * with its context meter, chips and status facts.
  */
 import type { TextEditor } from "../editor.js";
-import type { Conversation, Image } from "../model.js";
+import type { Conversation, Image, Item } from "../model.js";
 import { duration, firstLine, h, money, s, tokens, type EditEvent, type Node, type SendEvent, type Span } from "./h.js";
 
 /** The wire id of the composer's editor: the caret anchor of the completion popup. */
@@ -37,6 +37,8 @@ export interface DockState {
   effort: string;
   /** A newer claude-tsp on offer (its version), or empty. */
   update: string;
+  /** A pane about a phone wide: the bar keeps what can be acted on and drops the figures. */
+  narrow: boolean;
   /** Whether the model takes an effort level at all. */
   reasoning: boolean;
   /** A dialog owns the keyboard: the composer is not ready for a `send`. */
@@ -58,6 +60,8 @@ export interface DockActions {
   pickModel(): void;
   cycleEffort(): void;
   showUpdate(): void;
+  toggleAgents(): void;
+  toggleUltracode(): void;
   cycleMode(): void;
   showContext(): void;
   showSession(): void;
@@ -111,7 +115,8 @@ function todoHud(conv: Conversation, state: DockState): Node | null {
 
 /** The work still running behind the conversation, as a pill that opens its list. */
 function runningPill(conv: Conversation, on: DockActions): Node | null {
-  const agents = conv.items.filter(item => item.kind === "agent" && item.background && (item.agentStatus === "running" || item.agentStatus === "pending"));
+  // Subagents have a chip of their own in the composer (`agentsChip`): this pill is the rest.
+  const agents: Item[] = [];
   const tasks = [...conv.background.values()];
   const count = agents.length + tasks.length;
   if (!count) return null;
@@ -123,6 +128,17 @@ function runningPill(conv: Conversation, on: DockActions): Node | null {
       h("text", { key: "glance", role: "omp.hud.glance", wrap: "none", truncate: "end", spans: [s(only, "muted")] }),
       h("elapsed", { key: "age", age: Math.max(0, Date.now() - started), format: "short" }),
     ]),
+  ]);
+}
+
+/** The session's subagents as a chip that opens their pane. */
+function agentsChip(conv: Conversation, on: DockActions): Node | null {
+  const agents = conv.items.filter(item => item.kind === "agent");
+  if (!agents.length) return null;
+  const running = agents.filter(item => item.agentStatus === "running" || item.agentStatus === "pending").length;
+  return h("row", { key: "agents", role: "claude.composer.agents", ...(running ? { tone: "info" } : {}), gap: "xs", align: "center", title: `${running ? `${running} running, ` : ""}${agents.length} subagent${agents.length === 1 ? "" : "s"} in this session\nAlt+A shows them beside the conversation`, onClick: () => on.toggleAgents() }, [
+    running ? h("spinner", { key: "spin", style: "dots" }) : h("icon", { key: "icon", name: "agents" }),
+    h("text", { key: "label", wrap: "none", spans: [s(running ? `${running} agent${running === 1 ? "" : "s"}` : `${agents.length} agent${agents.length === 1 ? "" : "s"}`, running ? "info" : "muted")] }),
   ]);
 }
 
@@ -279,11 +295,18 @@ function composer(conv: Conversation, state: DockState, on: DockActions): Node {
         h("text", { key: "name", wrap: "none", spans: [s(state.modelName || "no model", "statusLineModel")] }),
         h("icon", { key: "chev", name: "chev" }),
       ]),
+      conv.ultracode
+        ? h("row", { key: "ultra", role: "claude.composer.ultracode", tone: "accent", gap: "xs", align: "center", title: "Ultracode is on: a workflow for every task\nClick to turn it off", onClick: () => on.toggleUltracode() }, [
+            h("icon", { key: "icon", name: "sparkles", tone: "accent" }),
+            h("text", { key: "label", wrap: "none", spans: [s("Ultracode", "accent")] }),
+          ])
+        : null,
       h("row", { key: "perm", role: "claude.composer.mode", tone: mode.tone, gap: "xs", align: "center", title: `${mode.hint}\nShift+Tab changes the mode`, onClick: () => on.cycleMode() }, [
         h("icon", { key: "icon", name: mode.icon, tone: mode.tone }),
         h("text", { key: "label", wrap: "none", spans: [s(mode.label, mode.tone)] }),
       ]),
-      conv.busy && conv.tokPerSec > 0 ? h("rate", { key: "rate", role: "omp.composer.rate", value: conv.tokPerSec, unit: "tok/s", title: "Generation rate" }) : null,
+      agentsChip(conv, on),
+      conv.busy && conv.tokPerSec > 0 && !state.narrow ? h("rate", { key: "rate", role: "omp.composer.rate", value: conv.tokPerSec, unit: "tok/s", title: "Generation rate" }) : null,
       extras(conv, state, on),
       h("text", { key: "usage", role: "omp.composer.usage", wrap: "none", text: usage, ...(usage ? { title: "Session cost" } : {}), onClick: () => on.showSession() }),
       conv.busy && editor.empty

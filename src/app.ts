@@ -32,13 +32,14 @@ import { latestSession, listSessions, readEntries, type SessionRow } from "./ses
 import { collectStats, emptyStats, type Stats } from "./stats.js";
 import { addRule, CLAUDE_CHOICES, CLAUDE_SETTINGS, getKey, getNested, setNested, readEnv, removeRule, setKey, SCOPES, setEnv, settingsPath, validRule, type Behavior, type Scope } from "./settingsfile.js";
 import { checkBinary, formatReport, standing, supported } from "./compat.js";
-import { LOGO_SVG, stylesheet } from "./theme.js";
+import { LOGO_SVG, paneCss, stylesheet } from "./theme.js";
 import { applyUpdate, checkForUpdate, compareVersions, installOf, KIND_LABEL, loadUpdateState, manualUpdate, notesOf, saveUpdateState, updateKind, updateSteps, type Release } from "./update.js";
 import { dropTraces, takeTrace, traced, traceFile, untraced, usesTracing } from "./trace.js";
 import { Vim } from "./vim.js";
 import { dock, EDITOR_ID, errorBanner, MODES, rewindPanel, type Attachment, type DockActions, type DockState } from "./view/dock.js";
 import { clock, duration, fileHref, firstLine, h, money, s, showPath, tokens, type EditEvent, type Node, type ViewCtx } from "./view/h.js";
-import { approvalPanel, completionPopup, fieldDialog, fieldInputId, pickerNode, prefsNode, QUESTION_INPUT_ID, questionPanel, sheet, toastNodes, type Completion, type PickerItem, type PrefsRow, type Toast } from "./view/overlays.js";
+import { agentsOf, agentsPane, agentTitle, paneLayout, type PaneLayout } from "./view/agents.js";
+import { approvalPanel, completionPopup, effortDialog, fieldDialog, fieldInputId, pickerNode, prefsNode, QUESTION_INPUT_ID, questionPanel, sheet, toastNodes, type Completion, type PickerItem, type PrefsRow, type Toast } from "./view/overlays.js";
 import { commandPane, diffHunks, toolTitle } from "./view/tools.js";
 import { TIPS, TranscriptView, welcome } from "./view/transcript.js";
 
@@ -168,6 +169,23 @@ interface CompletionState {
   selected: number;
 }
 
+/** Each level in Claude Code's own words (its /effort dialog). */
+const EFFORT_SAYS: Record<string, string> = {
+  low: "Quick, straightforward implementation with minimal overhead",
+  medium: "Balanced approach with standard implementation and testing",
+  high: "Comprehensive implementation with extensive testing and documentation",
+  xhigh: "Deeper reasoning than high, just below maximum (on supported models)",
+  max: "Maximum capability with deepest reasoning. This session only",
+};
+/** A local model's levels: what its server does with each. */
+const EFFORT_LOCAL: Record<string, string> = {
+  low: "Little reasoning before it answers: the fastest",
+  medium: "Some reasoning before it answers",
+  high: "Thorough reasoning before it answers",
+  max: "All the reasoning the model will do: the slowest",
+};
+const EFFORT_MAX_WARNING = "May use excessive tokens resulting in long response times or overthinking. Use sparingly for the hardest tasks.";
+
 const EFFORT_DETAIL: Record<string, string> = {
   low: "Fast, for simple edits",
   medium: "Balanced",
@@ -285,6 +303,13 @@ export class App {
   #questions: Question[] = [];
   #field: Field | null = null;
   #sheet: Sheet | null = null;
+  /** The effort dialog: the level under its thumb and ultracode as chosen there, applied only when confirmed. */
+  #effortUi: { levels: string[]; at: number; ultracode: boolean } | null = null;
+  /** The agents pane beside the conversation: which agent it shows, and whether it follows the newest one running. */
+  #agentPane: { focus: string | null } | null = null;
+  #agentPaneView: { id: string; view: TranscriptView } | null = null;
+  /** The stylesheet in force while a pane is open beside the conversation (empty: none). */
+  #paneStyled = "";
   #prefs: Prefs | null = null;
   #completion: CompletionState | null = null;
   #completionDismissed = "";
@@ -468,6 +493,8 @@ export class App {
 
   /** Replaces the running process: a resume, a rewind, a fork, or a restart after the TUI had the session. */
   async #restart(state: SpawnState, transcript: string | null, leaf?: string): Promise<void> {
+    // Ultracode is a switch of the process, not of the conversation: it goes to the process that takes over.
+    const ultracode = this.conv.ultracode;
     this.#swapping = true;
     this.#denyAll();
     try {
@@ -476,6 +503,15 @@ export class App {
       this.#swapping = false;
     }
     await this.#start({ model: this.#modelValue || null, permissionMode: this.conv.permissionMode, effort: this.conv.effort || null, ...state }, transcript, leaf);
+    if (ultracode && this.conv.ultracodeAvailable && !this.conv.ultracode) {
+      try {
+        await this.#cc.request("apply_flag_settings", { settings: { ultracode: true } });
+        await this.#refreshSettings();
+      } catch {
+        /* the chip then shows it is off, which is the truth */
+      }
+      this.schedule();
+    }
   }
 
   /** Starts the session's process again as it stands (a setting that Claude Code reads only at start changed). */
@@ -503,11 +539,17 @@ export class App {
     const line = settings?.effective?.statusLine;
     this.#statusLineCommand = line?.type === "command" && typeof line.command === "string" ? line.command : "";
     this.conv.effort = applied.effort ? String(applied.effort) : "";
+    this.conv.ultracode = applied.ultracode === true;
+    this.conv.ultracodeAvailable = applied.ultracodeAvailable === true;
     const wanted = asked ?? (typeof settings?.effective?.model === "string" ? settings.effective.model : null);
     const model = this.#models.find(entry => entry.value === wanted) ?? this.#models.find(entry => entry.value !== "default" && (entry.resolvedModel ?? entry.value) === this.conv.model) ?? this.#models.find(entry => (entry.resolvedModel ?? entry.value) === this.conv.model);
     this.#modelValue = model?.value ?? wanted ?? "";
     // claude-pi's local model takes its effort from the plugin, not from Claude Code.
-    if (this.#local()) this.conv.effort = localEffort();
+    if (this.#local()) {
+      this.conv.effort = localEffort();
+      this.conv.ultracode = false;
+      this.conv.ultracodeAvailable = false;
+    }
     this.conv.touch();
   }
 
@@ -1270,7 +1312,7 @@ export class App {
         retry: () => void this.#retry(),
         pickModel: () => this.#pickModel(),
         login: () => void this.#login(""),
-        openAgent: item => this.#openAgent(item),
+        openAgent: item => this.#toggleAgentPane(item),
         stopTask: item => void this.#stopTask(item.taskId ?? "", firstLine(item.args?.description ?? "subagent", 60)),
         open: () => undefined,
         shell: (id, value) => this.#shellControl(id, value),
@@ -1397,7 +1439,7 @@ export class App {
   }
 
   #blocked(): boolean {
-    return Boolean(this.#picker || this.#approvals.length || this.#questions.length || this.#field || this.#sheet || this.#prefs || this.#rewind);
+    return Boolean(this.#picker || this.#approvals.length || this.#questions.length || this.#field || this.#sheet || this.#prefs || this.#rewind || this.#effortUi);
   }
 
   #dockState(): DockState {
@@ -1410,6 +1452,7 @@ export class App {
       modelIcon: this.#modelIcon(),
       effort: this.#thinkingOff ? "off" : this.conv.effort,
       update: this.#updateOffer()?.version ?? "",
+      narrow: this.#session.caps.cols < 100,
       reasoning: this.#levels().length > 1 || this.#thinkingOff,
       blocked: this.#blocked(),
       starting: this.#starting,
@@ -1427,6 +1470,8 @@ export class App {
       pickModel: () => this.#pickModel(),
       cycleEffort: () => void this.#cycleEffort(),
       showUpdate: () => void this.#showUpdate(false),
+      toggleAgents: () => this.#toggleAgentPane(),
+      toggleUltracode: () => void this.#setUltracode(!this.conv.ultracode),
       cycleMode: () => void this.#cycleMode(),
       showContext: () => void this.#showContext(),
       showSession: () => void this.#showSession(),
@@ -1569,6 +1614,17 @@ export class App {
       );
     }
     if (this.#prefs) layer.push(this.#prefsView());
+    const paneAt = paneLayout(this.#session.caps.cols);
+    const agentPane = this.#agentPaneNode(paneAt);
+    if (agentPane) layer.push(agentPane);
+    // The conversation and the composer move over while the pane is beside them.
+    const paneStyle = agentPane ? paneCss(paneAt) : "";
+    if (paneStyle !== this.#paneStyled && this.#session.caps.features.includes("styles")) {
+      this.#paneStyled = paneStyle;
+      this.#surface.stylesheet("claude-tsp-pane", paneStyle || null);
+    }
+    const effortUi = this.#effortNode();
+    if (effortUi) layer.push(effortUi);
     if (this.#sheet) {
       const open = this.#sheet;
       layer.push(sheet(open.id, open.head, open.size, open.body(), () => this.#closeSheet(), open.extra?.() ?? []));
@@ -1594,7 +1650,7 @@ export class App {
         for (const id of this.#settled) if (!live.has(id)) this.#settled.delete(id);
       }
     }
-    const focus = this.#picker || this.#prefs || this.#sheet || this.#rewind ? null : field ? fieldInputId(field.multiline) : question ? (question.editor ? QUESTION_INPUT_ID : null) : EDITOR_ID;
+    const focus = this.#picker || this.#prefs || this.#sheet || this.#rewind || this.#effortUi ? null : field ? fieldInputId(field.multiline) : question ? (question.editor ? QUESTION_INPUT_ID : null) : EDITOR_ID;
     if (focus !== this.#focus) {
       this.#focus = focus;
       this.#surface.focus(focus);
@@ -1695,6 +1751,7 @@ export class App {
     this.#keySeq += 1;
     if (process.env.CLAUDE_TSP_KEYLOG) appendFileSync(process.env.CLAUDE_TSP_KEYLOG, `${JSON.stringify(pressed)}\n`);
     if (this.#keymap.action(key) === "app.clear") return this.#ctrlC();
+    if (this.#effortUi) return this.#effortKey(key);
     if (this.#sheet) return this.#sheetKey(key);
     if (this.#prefs) return this.#prefsKey(key);
     if (this.#picker) return this.#pickerKey(this.#picker, key);
@@ -1707,6 +1764,10 @@ export class App {
 
   async #ctrlC(): Promise<void> {
     const now = Date.now();
+    if (this.#effortUi) {
+      this.#effortUi = null;
+      return;
+    }
     if (this.#sheet) return this.#closeSheet();
     if (this.#prefs) {
       this.#prefs = null;
@@ -2019,6 +2080,9 @@ export class App {
       case "app.fast.toggle":
         if (this.#remote.some(command => command.name === "fast")) this.#sendCommand("/fast");
         else this.toast("Fast mode is not available for this model or account", "warning");
+        return true;
+      case "app.agents.pane":
+        this.#toggleAgentPane();
         return true;
       case "app.agents.kill":
         await this.#killAgents();
@@ -2739,9 +2803,13 @@ export class App {
   async #setEffort(args: string): Promise<void> {
     const level = args.trim().toLowerCase();
     if (!level) return this.#pickEffort();
+    const ultra = /^ultracode(?:\s+(on|off))?$/.exec(level);
+    if (ultra) return this.#setUltracode(ultra[1] ? ultra[1] === "on" : !this.conv.ultracode);
     const levels = this.#levels();
-    if (!levels.includes(level)) {
-      this.toast(levels.length ? `Unknown level "${level}". Available: ${levels.join(", ")}` : `${this.#modelName()} has no effort levels`, "warning");
+    // `auto`: the level is left to the model, as Claude Code's own /effort has it.
+    const auto = (level === "auto" || level === "unset") && levels.length > 1 && !this.#local();
+    if (!auto && !levels.includes(level)) {
+      this.toast(levels.length ? `Unknown level "${level}". Available: ${[...levels, ...(this.#local() ? [] : ["auto"]), ...(this.conv.ultracodeAvailable ? ["ultracode on|off"] : [])].join(", ")}` : `${this.#modelName()} has no effort levels`, "warning");
       return;
     }
     if (this.#local()) {
@@ -2759,10 +2827,27 @@ export class App {
       return;
     }
     try {
-      await this.#cc.request("apply_flag_settings", { settings: { effortLevel: level } });
+      // A level sent alone turns ultracode off in Claude Code: sent with it, ultracode stays as it was.
+      const ultra = this.conv.ultracode;
+      await this.#cc.request("apply_flag_settings", { settings: { effortLevel: auto ? null : level, ...(ultra ? { ultracode: true } : {}) } });
       await this.#refreshSettings();
-      this.conv.effort ||= level;
-      this.toast(`Effort: ${this.conv.effort}`);
+      if (!auto) this.conv.effort ||= level;
+      this.toast(`Effort: ${auto ? `auto (${this.conv.effort || "the model's default"})` : this.conv.effort}${this.conv.ultracode ? " · ultracode stays on" : ""}`);
+    } catch (error) {
+      this.toast(firstLine((error as Error).message, 160), "error");
+    }
+  }
+
+  /** Ultracode on or off: Claude Code's own switch, for this session. */
+  async #setUltracode(on: boolean): Promise<void> {
+    if (!this.conv.ultracodeAvailable) {
+      this.toast(`${this.#modelName()} does not take ultracode`, "warning");
+      return;
+    }
+    try {
+      await this.#cc.request("apply_flag_settings", { settings: { ultracode: on } });
+      await this.#refreshSettings();
+      this.toast(this.conv.ultracode ? `Ultracode on for this session: a workflow for every task. Effort stays ${this.conv.effort || "as it is"}` : `Ultracode off. Effort stays ${this.conv.effort || "as it is"}`);
     } catch (error) {
       this.toast(firstLine((error as Error).message, 160), "error");
     }
@@ -2972,15 +3057,27 @@ export class App {
 
   #pickEffort(): void {
     const levels = this.#levels();
-    if (levels.length < 2) {
+    const ultra = this.conv.ultracodeAvailable;
+    if (levels.length < 2 && !ultra) {
       this.toast(`${this.#modelName()} has no effort levels`, "warning");
+      return;
+    }
+    // The dialog Claude Code draws for /effort. A local model's levels are the plugin's: the same track, fewer stops.
+    if (levels.length > 1) {
+      const now = levels.indexOf(this.conv.effort || "medium");
+      this.#effortUi = { levels, at: now >= 0 ? now : levels.length - 1, ultracode: this.conv.ultracode };
+      this.schedule();
       return;
     }
     this.#openPicker({
       props: { title: "Effort", icon: "gauge", noun: "levels", size: "md", layout: "rows", preview: "none" },
-      items: levels.map(level => ({ id: level, label: level, detail: EFFORT_DETAIL[level] ?? "" })),
+      items: [
+        ...(levels.length > 1 ? levels : []).map(level => ({ id: level, label: level, detail: EFFORT_DETAIL[level] ?? "" })),
+        ...(levels.length > 1 && !this.#local() ? [{ id: "auto", label: "auto", detail: "Leave the level to the model" }] : []),
+        ...(ultra ? [{ id: "ultracode", label: this.conv.ultracode ? "ultracode: on" : "ultracode: off", detail: this.conv.ultracode ? "Turn off: back to ordinary turns. The effort level stays" : "Turn on: a workflow for every task, with any effort level, this session" }] : []),
+      ],
       selected: this.conv.effort || null,
-      current: this.conv.effort ? [this.conv.effort] : [],
+      current: [...(this.conv.effort ? [this.conv.effort] : []), ...(this.conv.ultracode ? ["ultracode"] : [])],
       searchable: false,
       actions: this.#chooseActions("Select"),
       choose: async id => {
@@ -2988,6 +3085,86 @@ export class App {
         await this.#setEffort(id);
       },
     });
+  }
+
+  #effortNode(): Node | null {
+    const ui = this.#effortUi;
+    if (!ui) return null;
+    const level = ui.levels[ui.at] ?? "";
+    const local = this.#local();
+    return effortDialog(
+      {
+        levels: ui.levels,
+        at: ui.at,
+        current: [this.conv.effort, this.conv.ultracode ? "ultracode" : ""].filter(Boolean).join(" · "),
+        ultracode: this.conv.ultracodeAvailable ? ui.ultracode : null,
+        detail: local ? `${EFFORT_LOCAL[level] ?? ""}  ·  ${this.#modelName()}, kept for the local model` : (EFFORT_SAYS[level] ?? ""),
+        ...(level === "max" && !local ? { warning: EFFORT_MAX_WARNING } : {}),
+        // A local model's level is the plugin's own setting: there is one way to set it.
+        saves: !local && level !== "max",
+        keys: this.#session.caps.cols >= 100,
+      },
+      {
+        level: index => {
+          ui.at = Math.max(0, Math.min(ui.levels.length - 1, index));
+          this.schedule();
+        },
+        ultracode: on => {
+          ui.ultracode = on;
+          this.schedule();
+        },
+        confirm: () => void this.#confirmEffort(true),
+        session: () => void this.#confirmEffort(false),
+        close: () => {
+          this.#effortUi = null;
+          this.schedule();
+        },
+      },
+    );
+  }
+
+  /** The effort dialog's keys, as Claude Code's: the arrows move, Tab flips ultracode, Enter confirms, S keeps it to this session. */
+  #effortKey(key: Key): void {
+    const ui = this.#effortUi;
+    if (!ui) return;
+    const move = (to: number): void => void (ui.at = Math.max(0, Math.min(ui.levels.length - 1, to)));
+    if (key.name === "escape" || key.name === "q") this.#effortUi = null;
+    else if (key.name === "left" || key.name === "h") move(ui.at - 1);
+    else if (key.name === "right" || key.name === "l") move(ui.at + 1);
+    else if (key.name === "home") move(0);
+    else if (key.name === "end") move(ui.levels.length - 1);
+    else if (key.name === "tab" && this.conv.ultracodeAvailable) ui.ultracode = !ui.ultracode;
+    else if (key.name === "enter") void this.#confirmEffort(true);
+    else if (key.name === "s" && !this.#local()) void this.#confirmEffort(false);
+    this.schedule();
+  }
+
+  /** Applies what the effort dialog shows. `save`: the level also becomes the default for new sessions, as Enter does in Claude Code. */
+  async #confirmEffort(save: boolean): Promise<void> {
+    const ui = this.#effortUi;
+    if (!ui) return;
+    this.#effortUi = null;
+    const level = ui.levels[ui.at]!;
+    // The plugin sets a local model's level and keeps it.
+    if (this.#local()) {
+      if (level !== this.conv.effort) await this.#setEffort(level);
+      this.schedule();
+      return;
+    }
+    const was = this.conv.ultracode;
+    const ultra = this.conv.ultracodeAvailable && ui.ultracode;
+    // `max` is never a default: Claude Code keeps it to the session it was chosen in.
+    const saved = save && level !== "max";
+    try {
+      // Sent together: a level on its own turns ultracode off.
+      await this.#cc.request("apply_flag_settings", { settings: { effortLevel: level, ...(this.conv.ultracodeAvailable ? { ultracode: ultra } : {}) } });
+      if (saved) setKey(settingsPath("userSettings", configDir(), this.#cwd), "effortLevel", level);
+      await this.#refreshSettings();
+      this.toast(`Effort: ${this.conv.effort || level}${saved ? " (saved as your default for new sessions)" : " for this session"}${ultra ? " · Ultracode on" : was ? " · Ultracode off" : ""}`);
+    } catch (error) {
+      this.toast(firstLine((error as Error).message, 160), "error");
+    }
+    this.schedule();
   }
 
   #pickMode(): void {
@@ -3585,7 +3762,7 @@ export class App {
         const item = runs.find(agent => agent.id === id);
         if (item) {
           this.#picker = null;
-          this.#openAgent(item);
+          this.#toggleAgentPane(item);
         } else if (id.startsWith("type:")) {
           this.#picker = null;
           this.editor.set(`Use the ${id.slice(5)} agent to `);
@@ -3632,7 +3809,7 @@ export class App {
         const agent = agents.find(item => item.taskId === id);
         if (agent) {
           this.#picker = null;
-          return this.#openAgent(agent);
+          return this.#toggleAgentPane(agent);
         }
         try {
           const result = await this.#cc.request("get_task_output", { task_id: id }, 10_000);
@@ -4153,6 +4330,7 @@ export class App {
       ...bound("app.effort.increase", "More effort"),
       ...bound("app.effort.decrease", "Less effort"),
       ...bound("app.fast.toggle", "Fast mode on or off"),
+      ...bound("app.agents.pane", "Show or hide the agents pane"),
       ...bound("app.agents.kill", "Stop every subagent and background task"),
       ...bound("app.clipboard.pasteImage", "Paste an image or text from the clipboard"),
       ...bound("app.editor.external", "Edit the draft in $EDITOR"),
@@ -4176,6 +4354,63 @@ export class App {
     };
   }
 
+  /** Opens the agents pane (on one agent, when given), or hides it. */
+  #toggleAgentPane(item?: Item): void {
+    if (item) this.#agentPane = { focus: item.id };
+    else if (this.#agentPane) this.#agentPane = null;
+    else {
+      const agents = agentsOf(this.conv);
+      if (!agents.length) {
+        this.toast("No subagent has run in this session yet");
+        return;
+      }
+      // One agent: its conversation at once; several: the overview.
+      this.#agentPane = { focus: agents.length === 1 ? agents[0]!.item.id : null };
+    }
+    this.schedule();
+  }
+
+  /** The agents pane, or nothing while it is hidden or a narrow pane needs the dock for a question. */
+  #agentPaneNode(layout: PaneLayout): Node | null {
+    const pane = this.#agentPane;
+    if (!pane) return null;
+    // A drawer lies over the dock: an approval, a question or a form there comes first.
+    if (!layout.beside && (this.#approvals.length || this.#questions.length || this.#field)) return null;
+    // Full view shows the same conversation over the whole pane: beside it the pane would say it twice.
+    if (this.#sheet?.id === "agent") return null;
+    const agents = agentsOf(this.conv);
+    const focus = pane.focus ? (agents.find(entry => entry.item.id === pane.focus)?.item ?? null) : null;
+    let transcript: Node[] = [];
+    if (focus) {
+      const sub = focus.sub;
+      // A stored run keeps its messages in a file of its own beside the session.
+      if (sub && !sub.items.length && focus.taskId && this.conv.sessionId) {
+        const path = sidechainFile(this.#cwd, this.conv.sessionId, focus.taskId);
+        try {
+          if (existsSync(path)) this.conv.loadSidechain(focus, readEntries(path));
+        } catch {
+          /* its report still shows */
+        }
+      }
+      if (this.#agentPaneView?.id !== focus.id) this.#agentPaneView = { id: focus.id, view: new TranscriptView() };
+      transcript = sub ? this.#agentPaneView.view.build(sub, { ...this.#viewCtx(), sub: true }) : [];
+    } else this.#agentPaneView = null;
+    return agentsPane(
+      { agents, focus, transcript, layout },
+      {
+        focus: id => {
+          this.#agentPane = { focus: id };
+          this.schedule();
+        },
+        hide: () => this.#toggleAgentPane(),
+        stop: item => void this.#stopTask(item.taskId ?? "", agentTitle(item)),
+        stopAll: () => void this.#killAgents(),
+        copy: item => this.copy(item.output ?? "", "Report"),
+        full: item => this.#openAgent(item),
+      },
+    );
+  }
+
   /** A subagent's own conversation, drawn live as the transcript is. */
   #openAgent(item: Item): void {
     const sub = item.sub;
@@ -4195,7 +4430,7 @@ export class App {
       head: title,
       size: "lg",
       body: () => {
-        const nodes = sub ? view.build(sub, this.#viewCtx()) : [];
+        const nodes = sub ? view.build(sub, { ...this.#viewCtx(), sub: true }) : [];
         const running = item.agentStatus === "running" || item.agentStatus === "pending";
         return [
           h("text", { key: "meta", spans: [s([item.agentType, item.model, item.agentStatus, item.stats?.tools ? `${item.stats.tools} tools` : "", item.stats?.tokens ? `${tokens(item.stats.tokens)} tok` : "", item.stats?.took != null ? duration(item.stats.took) : ""].filter(Boolean).join(" · "), "muted")] }),

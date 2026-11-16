@@ -31,6 +31,12 @@ except Exception: print("")'; }
 until_text() { local n=0; while [ $n -lt "${3:-60}" ]; do case "$(text "$1")" in *"$2"*) return 0 ;; esac; sleep 0.3; n=$((n+1)); done; return 1; }
 lacks() { case "$(text "$2")" in *"$3"*) ok "$1" 0 "found '$3'" ;; *) ok "$1" 1 ;; esac; }
 ok() { if [ "$2" = 1 ]; then pass=$((pass+1)); echo "PASS  $1"; else fail=$((fail+1)); nshot=$((nshot+1)); ctl shot "verify-fail-$nshot" >/dev/null; echo "FAIL  $1   ${3:-}  (shot verify-fail-$nshot)"; fi; }
+# Clicks the button whose text starts with LABEL.
+press() { local at; at=$(ctl tree 'button' 2>/dev/null | python3 -c 'import json,sys
+want=sys.argv[1]
+for n in json.load(sys.stdin).get("nodes",[]):
+    if str(n.get("text","")).startswith(want):
+        r=n["rect"]; print(int(r[0]+r[2]/2), int(r[1]+r[3]/2)); break' "$1"); [ -n "$at" ] && ctl click $at >/dev/null; }
 has() { [ "$(count "$2")" -gt 0 ] && ok "$1" 1 || ok "$1" 0 "nothing matches $2"; }
 hasnt() { [ "$(count "$2")" -eq 0 ] && ok "$1" 1 || ok "$1" 0 "$2 still there"; }
 says() { case "$(text "$2")" in *"$3"*) ok "$1" 1 ;; *) ok "$1" 0 "wanted '$3' in: …$(text "$2" | tail -c 200)" ;; esac; }
@@ -87,9 +93,22 @@ say "Create two tasks with TaskCreate named alpha and beta, then mark alpha in_p
 idle 60
 has "a subagent card" '[data-role="omp.task.agent"]'
 has "the task list above the composer" '[data-role="omp.hud.todo"]'
-say "/agents" 2; key Enter; sleep 3
-has "the subagent transcript sheet" '[data-role="omp.overlay.agent"]'
+says "the composer counts the session's subagents" '[data-role="claude.composer.agents"]' "1 agent"
+key alt+a; sleep 2
+has "Alt+A opens the agents pane" '[data-role="claude.agents"]'
+has "one agent in the session opens on its conversation" '[data-role="claude.agents.nav"]'
+says "the pane names what the agent was asked" '[data-role="claude.agents.agent"]' "inspect calc"
+press "Full view"; sleep 2
+has "Full view opens the conversation over the whole pane" '[data-role="omp.overlay.agent"]'
+hasnt "the pane steps aside while Full view is open" '[data-role="claude.agents"]'
 key Escape; sleep 1
+press "Agents"; sleep 2
+has "back from one agent is the overview, a tile for each" '[data-role="claude.agents.tile"]'
+key alt+a; sleep 1
+hasnt "Alt+A hides the pane" '[data-role="claude.agents"]'
+say "/agents" 2; key Enter; sleep 3
+has "an agent chosen in /agents opens in the pane" '[data-role="claude.agents.nav"]'
+key alt+a; sleep 1
 
 say "!echo shellword" 3
 has "a !command row" '[data-role="omp.bash"]'
@@ -108,6 +127,12 @@ says "/btw answers from the conversation" '[data-role="omp.overlay.btw"]' "PAPAY
 key Escape
 key alt+t; sleep 2; titled "Alt+T turns thinking off" '[data-role="omp.composer.model.effort"]' "Thinking is off"
 key alt+t; sleep 2; titled "Alt+T turns it back on" '[data-role="omp.composer.model.effort"]' "Effort:"
+say "/effort" 2
+has "/effort opens the effort dialog" '[data-role="omp.overlay.effort"]'
+says "a local model has its own three levels on the track" '[data-role="claude.effort.label"]' "low | high | max"
+hasnt "and no Ultracode switch" '[data-role="claude.effort.ultracode"]'
+key Escape; sleep 1
+hasnt "Esc closes the dialog and changes nothing" '[data-role="omp.overlay.effort"]'
 
 for cmd in model mode context usage status mcp permissions agents todos skills output-style resume fork tree copy outline settings help doctor hooks memory plugin; do
   ctl key ctrl+u >/dev/null; ctl type "\"/$cmd\"" >/dev/null; key Enter; until_ "$OPEN" 12
@@ -204,6 +229,16 @@ EOF
 start "CLAUDE_CONFIG_DIR=$HOME/.claude-pi claude-tsp --model haiku --permission-mode plan --mcp-config /tmp/ctsp-verify-mcp.json --settings /tmp/ctsp-verify-settings.json"
 says "the stock profile is named Claude Code" '[data-role="omp.welcome"]' "Claude Code"
 says "a Claude model is named" '[data-role="omp.composer.model"]' "Haiku"
+say "/effort" 2
+says "a Claude model has Claude Code's five levels" '[data-role="claude.effort.label"]' "low | medium | high | xhigh | max"
+key Tab; sleep 1; key s; sleep 3
+has "Tab turns Ultracode on in the dialog and S applies it to the session" '[data-role="claude.composer.ultracode"]'
+say "/effort low" 3
+has "Ultracode stays on when the level changes" '[data-role="claude.composer.ultracode"]'
+say "/add-dir /tmp/ctsp-verify2" 3; until_ '[data-role="omp.composer.model"]' 30; sleep 5
+has "Ultracode is put back when the surface restarts Claude Code's process" '[data-role="claude.composer.ultracode"]'
+say "/effort ultracode off" 3
+hasnt "/effort ultracode off turns it off" '[data-role="claude.composer.ultracode"]'
 say "Plan a one-line change: add a comment at the top of calc.py. Keep the plan to three lines and present it with ExitPlanMode right away, without reading files." 3; until_ "$APPROVAL" 60
 says "plan mode ends in a plan approval" "$APPROVAL" "plan"
 says "the plan approval offers accept-edits" '[data-role="omp.approval.choices"]' "accept edits automatically"
@@ -422,12 +457,6 @@ grep -q '"CLAUDE_CODE_USE_BEDROCK": "1"' $PLUG/settings.json 2>/dev/null && ! gr
 rm -rf $GHD $PLUG $MARKET /tmp/ctsp-verify-traffic.json $DEMO/.claude/settings.local.json
 
 echo "== updates of claude-tsp, and the Claude Code check"
-# Clicks the button whose text starts with LABEL.
-press() { local at; at=$(ctl tree 'button' 2>/dev/null | python3 -c 'import json,sys
-want=sys.argv[1]
-for n in json.load(sys.stdin).get("nodes",[]):
-    if str(n.get("text","")).startswith(want):
-        r=n["rect"]; print(int(r[0]+r[2]/2), int(r[1]+r[3]/2)); break' "$1"); [ -n "$at" ] && ctl click $at >/dev/null; }
 # A release feed of its own, so the check never depends on what GitHub has.
 FEED=/tmp/ctsp-verify-feed; rm -rf $FEED; mkdir -p $FEED
 printf '[{"tag_name":"v99.0.0","html_url":"https://example.invalid/v99.0.0","published_at":"2030-01-01T00:00:00Z","body":"## [99.0.0]\\n\\n### Added\\n- A verify-only release.","assets":[]}]' > $FEED/releases.json

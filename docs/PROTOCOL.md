@@ -33,7 +33,7 @@ chain (calls made side by side). A subagent's messages are in
 | `control_request initialize` (`promptSuggestions`, `agentProgressSummaries`, `forwardSubagentText`, `perTaskStopAffordance`) | commands, models, account, version, mode |
 | `user` with our own `uuid` | prompts and slash commands; `priority: "later"` queues for after the turn; `shouldQuery: false` records a `!command` without a turn |
 | `interrupt`, `background_tasks`, `stop_task`, `cancel_async_message` | Esc, Ctrl+B, Stop, Alt+↑ |
-| `set_model`, `set_permission_mode`, `apply_flag_settings {effortLevel}`, `update_settings {outputStyle}`, `rename_session` | the chips and pickers |
+| `set_model`, `set_permission_mode`, `apply_flag_settings {effortLevel, ultracode}` (a level sent without `ultracode` turns it off), `update_settings {outputStyle}`, `rename_session` | the chips and pickers |
 | `get_settings`, `get_context_usage`, `get_usage`, `mcp_status`, `mcp_reconnect`, `mcp_toggle`, `list_permission_rules`, `get_task_output` | sheets |
 | `rewind_files {user_message_id, dry_run}` | rewind |
 | `control_response` | answers to Claude Code's requests |

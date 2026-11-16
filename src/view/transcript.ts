@@ -72,6 +72,14 @@ function userNode(item: Item, ctx: ViewCtx): Node {
     { id: "rewind", label: "Rewind to here…", icon: "rewind" },
   ];
   const command = /^\/\S/.test(item.text) && !item.text.includes("\n");
+  // What a subagent was told is read, not acted on: no row of tools under it.
+  if (ctx.sub) {
+    const copy = [{ id: "copy-message", label: "Copy message", icon: "copy" }];
+    return h("card", { key: item.id, role: "omp.user", tone: "user", actions: { menu: copy, hold: copy }, onAction: { "copy-message": () => ctx.on.copy(item.text, "Message") } }, [
+      images.length ? h("row", { key: "images", gap: "sm", wrap: true }, images) : null,
+      item.text ? h("md", { key: "text", text: item.text }) : null,
+    ]);
+  }
   return h(
     "card",
     {

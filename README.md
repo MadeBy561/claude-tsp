@@ -33,6 +33,10 @@
 |---|---|
 | ![A turn](docs/claude-tsp-turn.png) | ![Approval](docs/claude-tsp-approval.png) |
 
+| Subagents at work, in a pane of their own | `/effort`, with Ultracode |
+|---|---|
+| ![Agents pane](docs/claude-tsp-agents.png) | ![Effort](docs/claude-tsp-effort.png) |
+
 | Models | Settings | Light |
 |---|---|---|
 | ![Models](docs/claude-tsp-models.png) | ![Settings](docs/claude-tsp-settings.png) | ![Light theme](docs/claude-tsp-light.png) |
@@ -82,6 +86,7 @@ Every Claude Code flag passes through: `claude-tsp --model opus`,
 | Esc | Stop Claude (or a running `!command`); twice on an empty draft opens rewind |
 | Shift+Tab | Step the permission mode: Ask, Accept edits, Plan, Auto |
 | Alt+P | Switch model; Alt+T turns thinking on or off; Alt+E steps the effort |
+| Alt+A | Show or hide the agents pane |
 | Ctrl+B | Send the running command or subagent to the background |
 | Ctrl+T, Ctrl+O | Show or hide the task list; expand every block |
 | Ctrl+R, Ctrl+S | Search prompt history; set the draft aside |
@@ -114,6 +119,22 @@ Code's non-essential traffic, which claude-pi's settings switch off.
 
 Plugins that draw (`$.ui`) are drawn too: their band sits above the composer,
 their panes open as sheets, and `/widgets` reaches their buttons by keyboard.
+
+### Subagents
+
+A chip in the composer counts the session's subagents. Click it, press Alt+A,
+or open an agent's card, and they get a pane of their own: every agent at
+once, the ones at work with their last steps live, and one tap into any
+agent's conversation as it is written. On a desktop the pane sits beside the
+conversation; on a phone it is a drawer.
+
+### Effort and Ultracode
+
+`/effort` opens the dialog Claude Code draws: a track from Faster to Smarter
+with the model's levels. ←/→ move, Tab switches Ultracode (a workflow for
+every task, for this session), Enter confirms and saves the level as your
+default, S keeps it to this session. `/effort high`, `/effort auto` and
+`/effort ultracode on` do the same from the keyboard.
 
 ## Updates
 
@@ -177,8 +198,8 @@ the clay off, and the Tern theme's own accent is used instead.
 ## Develop
 
 ```sh
-npm test                                  # build + 78 tests
-tools/verify.sh                           # 163 end-to-end checks in headless Tern (about 40 minutes)
+npm test                                  # build + 87 tests
+tools/verify.sh                           # 180 end-to-end checks in headless Tern (about 15 minutes)
 tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"   # headless Tern
 tools/say.sh a "hello" 6 shot-name        # type, send, wait, screenshot
 tools/serve.sh stop a

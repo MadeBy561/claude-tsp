@@ -90,7 +90,7 @@ rows) against claude-tsp, with what shows it. Evidence is one of:
 | L12 | Result images | ✅ | T model |
 | L13 | User `!` row with live output, cancellable | ✅ | V "a !command row", "the shell output reached the model" |
 | L14 | todo card and HUD | ✅ | V "the task list above the composer"; T model |
-| L15 | agent node, nested | ✅ | V "a subagent card", "the subagent transcript sheet"; T model |
+| L15 | agent node, nested | ✅ | V "a subagent card", "Alt+A opens the agents pane"; T model, T agents |
 | L16 | Extension tools | ✅ | V "the form's answer reached the tool" (an MCP tool's card) |
 
 ## Composer, dock, status (C1–C18)
@@ -124,7 +124,7 @@ rows) against claude-tsp, with what shows it. Evidence is one of:
 | O2 | Extension select and confirm | ✅ | V "a question panel", "an MCP server's form opens" |
 | O3 | Extension input and editor | ✅ | V MCP form, sign-in dialog |
 | O4 | Model picker | ✅ | V "/model opens and closes" |
-| O5 | Thinking selector | ✅ | S `#pickEffort`; V Alt+T |
+| O5 | Thinking selector | ✅ | V "/effort opens the effort dialog", Alt+T; T effort |
 | O6 | Session picker with delete confirm | ✅ | V "/resume redraws another session" |
 | O7 | Tree selector | ✅ | V "/tree shows the abandoned branch"; T model |
 | O8 | Rewind page | ✅ | V "rewind restores the file", "keeps only the earlier message" |
@@ -132,7 +132,7 @@ rows) against claude-tsp, with what shows it. Evidence is one of:
 | O10 | Settings as `prefs` | ✅ | V "/settings opens and closes" |
 | O11 | Login dialogs | ✅ | V "/login opens the sign-in dialog", "a wrong code is refused" |
 | O12 | Session info | ✅ | V "/status opens and closes" |
-| O13 | Agent transcript viewer | ✅ | V "the subagent transcript sheet" |
+| O13 | Agent transcript viewer | ✅ | V "one agent in the session opens on its conversation", "Full view opens the conversation over the whole pane" |
 | O14 | Context viewer | ✅ | V "/context opens and closes" |
 | O15 | Hotkeys sheet | ✅ | V "/help opens and closes" |
 | O16 | Plan review | ✅ | V "plan mode ends in a plan approval", "the planned edit was made" |

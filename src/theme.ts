@@ -52,6 +52,15 @@ export function stylesheet(clay: boolean): string {
 [data-role="omp.welcome.wordmark"] { font-family: ui-serif, "Iowan Old Style", "Palatino Linotype", Georgia, serif; letter-spacing: -0.01em; }
 [data-role="claude.composer.mode"] { border-radius: 999px; padding: 0 0.6em; cursor: pointer; background: var(--l1); }
 [data-role="claude.composer.mode"][data-tone="accent"] { background: var(--claude-wash); }
+[data-role="claude.composer.agents"] { border-radius: 999px; padding: 0 0.6em; cursor: pointer; background: var(--l1); }
+[data-role="claude.agents.tile"] { border-radius: 14px; padding: 0.6em 0.7em; cursor: pointer; background: var(--l1); }
+[data-role="claude.agents.tile"][data-tone="info"] { background: color-mix(in oklab, var(--live, var(--accent)) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--live, var(--accent)) 22%, transparent); }
+[data-role="claude.agents.tile"][data-tone="error"] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--err, #d33) 30%, transparent); }
+[data-role="claude.agents.nav"] { position: sticky; top: 0; z-index: 2; }
+/* The effort track names its stops under it: the number beside it says nothing. */
+[data-role="claude.effort.slider"] > span { display: none; }
+[data-role="claude.effort.label"] { cursor: pointer; }
+[data-role="claude.composer.ultracode"] { border-radius: 999px; padding: 0 0.6em; cursor: pointer; background: var(--claude-wash); }
 [data-role="claude.composer.mode"][data-tone="info"] { background: color-mix(in oklab, var(--live, var(--accent)) 14%, transparent); }
 [data-role="claude.composer.mode"][data-tone="success"] { background: color-mix(in oklab, var(--ok) 14%, transparent); }
 [data-role="claude.composer.mode"][data-tone="warning"] { background: color-mix(in oklab, var(--warn) 16%, transparent); }
@@ -72,4 +81,39 @@ export function stylesheet(clay: boolean): string {
 [data-role="omp.welcome.mark"] { min-width: 0; max-width: calc(100% - 66px); }
 [data-role="omp.welcome.version"] { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 `;
+}
+
+/**
+ * The stylesheet in force while a pane is open.
+ *
+ * Beside the conversation: every top-level block of the conversation, the
+ * dock and the dialogs leaves the pane its `beside` pixels and centres in
+ * what is left, at the `measure` that fits. (A region's root cannot be
+ * styled, only what is in it; the composer and the rows above it have widths
+ * of their own in Tern's sheet.)
+ *
+ * Under a finger: the pane's buttons and rows get targets a finger can hit.
+ */
+export function paneCss(layout: { beside: number; measure: number; touch: boolean }): string {
+  const rules: string[] = [];
+  if (layout.beside) {
+    const top = `:not([data-role] [data-role])`;
+    // What Tern centres with automatic margins (the composer and the rows above it) would slide to the pane's edge.
+    const docked = [`[data-role^="omp.editor"]`, `[data-role^="omp.hud"]`, `[data-role="omp.queue"]`, `[data-role="omp.track"]`].map(role => `${role}${top}`).join(", ");
+    rules.push(
+      `* { --rd-measure: ${layout.measure}px; }`,
+      // Only the margin: a dialog keeps the layer's height, and so its own scrolling.
+      `[data-role]${top}:not([data-role="claude.agents"]) { margin-right: ${layout.beside}px !important; }`,
+      `${docked} { margin-left: 0 !important; align-self: center !important; }`,
+      `[data-role^="omp.editor"]${top} { max-width: ${layout.measure}px !important; }`,
+      `[data-role^="omp.hud"]${top}, [data-role="omp.queue"]${top} { max-width: ${layout.measure - 16}px !important; }`,
+    );
+  }
+  if (layout.touch) {
+    rules.push(
+      `[data-role="claude.agents"] [data-role="claude.agents.btn"] { min-height: 40px; min-width: 40px; padding-left: 14px; padding-right: 14px; }`,
+      `[data-role="claude.agents"] [data-role="claude.agents.tile"] { padding: 0.8em 0.9em; }`,
+    );
+  }
+  return rules.join("\n");
 }
