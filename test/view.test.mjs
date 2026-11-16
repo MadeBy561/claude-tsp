@@ -5,8 +5,9 @@ import { TextEditor } from "../dist/editor.js";
 import { dock, MODES } from "../dist/view/dock.js";
 import { approvalPanel, questionPanel, sheet } from "../dist/view/overlays.js";
 import { toolNode, agentNode, toolTitle, diffHunks } from "../dist/view/tools.js";
-import { TranscriptView, welcome } from "../dist/view/transcript.js";
-import { stylesheet, LOGO_SVG } from "../dist/theme.js";
+import { TranscriptView, greeting, welcome } from "../dist/view/transcript.js";
+import { flareCss, paneCss, stylesheet } from "../dist/theme.js";
+import { gauge, spark } from "../dist/view/spark.js";
 
 const ctx = () => ({ cwd: "/proj", kinds: new Set(["shell", "json"]), hour12: false, expandAll: false, hideThinking: false, showImages: true, showUsage: false, showCharts: true, compactTools: false, shell: new Map(), fold: new Map(), foldRev: 0, blob: () => undefined, on: { toggle() {}, copy() {}, rewind() {}, editTurn() {}, retry() {}, pickModel() {}, login() {}, openAgent() {}, stopTask() {}, open() {}, shell() {} } });
 const find = (node, test) => (test(node) ? node : node.children.map(child => find(child, test)).find(Boolean));
@@ -94,13 +95,41 @@ test("the transcript groups reads, keeps unchanged blocks, and the welcome names
   assert.deepEqual(first.map(node => [node.kind, node.props.role]), [["card", "omp.user"], ["tool", "omp.tool.read"]]);
   assert.equal(first[1].props.target, "2 files");
   assert.equal(view.build(conv, ctx())[0], first[0]);
-  const lockup = welcome({ name: "Claude Code", version: "1.0.0", claudeVersion: "2.1.0", tip: "tip", account: "Claude Max" });
-  assert.match(JSON.stringify(find(lockup, entry => entry.props.key === "wordmark").props.spans), /Claude Code/);
+  const start = welcome({ name: "Claude Code", version: "1.0.0", claudeVersion: "2.1.0", tip: "tip", account: "Claude Max", greeting: greeting(9), power: "on", fresh: true });
+  assert.equal(find(start, entry => entry.props.key === "greeting").props.text, "Good morning");
+  assert.equal(find(start, entry => entry.props.key === "facts").props.text, "Claude Code 2.1.0 · claude\u2011tsp 1.0.0 · Claude Max");
+  // Ultracode powers Clawd up.
+  assert.ok(find(start, entry => entry.props.role === "claude.hero.stage.flare"));
+  assert.deepEqual([0, 5, 12, 18, 22].map(greeting), ["Still up?", "Good morning", "Good afternoon", "Good evening", "Working late?"]);
 });
 
-test("the stylesheet sets Claude's accent only when asked, and the mark is an SVG", () => {
+test("the stylesheet sets Claude's accent only when asked, and holds nothing Tern refuses", () => {
   assert.match(stylesheet(true), /--accent: var\(--claude\)/);
   assert.match(stylesheet(true), /light-dark\(/);
   assert.doesNotMatch(stylesheet(false), /--accent:/);
-  assert.match(LOGO_SVG, /^<svg /);
+  const sheet = stylesheet(false);
+  // Tern drops the whole sheet over one rule it refuses, and the look with it. These are the refusals met so far.
+  for (const css of [stylesheet(true), stylesheet(false), flareCss(), paneCss({ beside: 416, measure: 600, touch: true })]) {
+    assert.doesNotMatch(css, /url\(|position:\s*fixed|@property|@import|clip-path:\s*(polygon|ellipse|circle|path)|padding-inline|margin-inline|color-mix\(in srgb, Canvas|[;{]\s*contain:|[^-\]"]\s~\s|\s\+\s\[/);
+  }
+  // Ultracode's scene: every layer the start screen makes is drawn by the sheet that travels with it.
+  const powered = welcome({ name: "Claude Code", version: "1", claudeVersion: "2", tip: "", account: "", greeting: "hi", power: "on", fresh: true });
+  const layers = [];
+  (function walk(node) { if (String(node.props.role ?? "").startsWith("claude.ssj.")) layers.push(node.props.role); for (const child of node.children ?? []) walk(child); })(powered);
+  assert.ok(layers.length >= 9);
+  // Switched off, the power drains on a stage of its own, then the plain stage stands without Clawd's first hop.
+  const roles = power => { const out = []; (function walk(node) { if (node.props.role) out.push(node.props.role); for (const child of node.children ?? []) walk(child); })(welcome({ name: "Claude Code", version: "1", claudeVersion: "2", tip: "", account: "", greeting: "hi", power, fresh: power !== "rest" })); return out; };
+  assert.ok(roles("spent").includes("claude.hero.stage.cool") && roles("spent").includes("claude.ssj.power") && roles("spent").includes("claude.clawd"));
+  assert.ok(flareCss().includes(`[data-role="claude.hero.stage.cool"] [data-role="claude.ssj.power"]`));
+  assert.ok(roles("rest").includes("claude.hero.stage.rest") && !roles("rest").some(role => role.startsWith("claude.ssj.")));
+  assert.ok(roles("off").includes("claude.hero.stage") && roles("off").includes("claude.hero") && roles("rest").includes("claude.hero.past"));
+  for (const role of layers) assert.ok(flareCss().includes(`[data-role="${role}"]`), role);
+  // The effort gauge lights more rays the higher the level, and all twelve at max.
+  assert.equal(gauge("g", "high").props.role, "claude.gauge.high");
+  assert.ok(sheet.includes(`[data-role="claude.gauge.max"] [data-role="claude.ray.11"]`));
+  // The spark has a ray for each node the view makes, and every state the view names has its motion.
+  const mark = spark("s", "think");
+  assert.equal(mark.props.role, "claude.spark.think");
+  for (const ray of mark.children) assert.ok(sheet.includes(`[data-role="${ray.props.role}"] {`), ray.props.role);
+  for (const state of ["think", "work", "wait", "flare", "warn"]) assert.ok(sheet.includes(`[data-role="claude.spark.${state}"]`), state);
 });

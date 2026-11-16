@@ -32,7 +32,7 @@ import { latestSession, listSessions, readEntries, type SessionRow } from "./ses
 import { collectStats, emptyStats, type Stats } from "./stats.js";
 import { addRule, CLAUDE_CHOICES, CLAUDE_SETTINGS, getKey, getNested, setNested, readEnv, removeRule, setKey, SCOPES, setEnv, settingsPath, validRule, type Behavior, type Scope } from "./settingsfile.js";
 import { checkBinary, formatReport, standing, supported } from "./compat.js";
-import { LOGO_SVG, paneCss, stylesheet } from "./theme.js";
+import { flareCss, paneCss, stylesheet } from "./theme.js";
 import { applyUpdate, checkForUpdate, compareVersions, installOf, KIND_LABEL, loadUpdateState, manualUpdate, notesOf, saveUpdateState, updateKind, updateSteps, type Release } from "./update.js";
 import { dropTraces, takeTrace, traced, traceFile, untraced, usesTracing } from "./trace.js";
 import { Vim } from "./vim.js";
@@ -41,7 +41,7 @@ import { clock, duration, fileHref, firstLine, h, money, s, showPath, tokens, ty
 import { agentsOf, agentsPane, agentTitle, paneLayout, type PaneLayout } from "./view/agents.js";
 import { approvalPanel, completionPopup, effortDialog, fieldDialog, fieldInputId, pickerNode, prefsNode, QUESTION_INPUT_ID, questionPanel, sheet, toastNodes, type Completion, type PickerItem, type PrefsRow, type Toast } from "./view/overlays.js";
 import { commandPane, diffHunks, toolTitle } from "./view/tools.js";
-import { TIPS, TranscriptView, welcome } from "./view/transcript.js";
+import { TIPS, TranscriptView, greeting, welcome, type Power } from "./view/transcript.js";
 
 export const VERSION: string = (() => {
   try {
@@ -212,6 +212,9 @@ export interface AppOptions {
   cwd: string;
 }
 
+/** How long Clawd's powering down is played before the start screen is plain again. */
+const POWER_DOWN_MS = 1500;
+
 export class App {
   readonly conv = new Conversation();
   readonly editor = new TextEditor();
@@ -310,6 +313,10 @@ export class App {
   #agentPaneView: { id: string; view: TranscriptView } | null = null;
   /** The stylesheet in force while a pane is open beside the conversation (empty: none). */
   #paneStyled = "";
+  #flareStyled = false;
+  /** Ultracode was on at the last look, and until when its switching off is still being played. */
+  #powered = false;
+  #spentUntil = 0;
   #prefs: Prefs | null = null;
   #completion: CompletionState | null = null;
   #completionDismissed = "";
@@ -1255,30 +1262,35 @@ export class App {
     }
   };
 
-  #logoBlob: string | undefined;
   /** The two spacers around the welcome block: the same nodes every frame. */
   #mainHead = { top: h("spacer", { key: "top", size: "sm" }), gap: h("spacer", { key: "gap", size: "sm" }) };
   #welcomeNode: { sig: string; node: Node } | null = null;
-
-  #logo(): string | undefined {
-    if (!this.#session.caps.features.includes("blobs")) return undefined;
-    try {
-      this.#logoBlob ??= this.#session.blob(Buffer.from(LOGO_SVG, "utf8"), "image/svg+xml");
-    } catch {
-      return undefined;
-    }
-    return this.#logoBlob;
-  }
 
   #accountLine(): string {
     const plan = this.#account.subscriptionType ? `Claude ${String(this.#account.subscriptionType).replace(/^claude\s+/i, "").replace(/^./, ch => ch.toUpperCase())}` : this.#account.apiProvider && this.#account.apiProvider !== "firstParty" ? String(this.#account.apiProvider) : "";
     return [plan, this.#account.organization && !/'s Organization$/.test(String(this.#account.organization)) ? String(this.#account.organization) : ""].filter(Boolean).join(" · ");
   }
 
-  #welcome(): Node {
-    const logo = this.#logo();
-    const sig = `${this.#claudeVersion}|${logo}|${this.#accountLine()}`;
-    if (this.#welcomeNode?.sig !== sig) this.#welcomeNode = { sig, node: welcome({ name: PROFILE.name, version: VERSION, claudeVersion: this.#claudeVersion, tip: this.#tip, account: this.#accountLine(), logo }) };
+  /**
+   * Where Ultracode stands for the start screen. Switching it off is a scene of its own (`spent`) for a moment,
+   * and a redraw is booked for when that moment is over.
+   */
+  #power(): Power {
+    const on = this.conv.ultracode === true;
+    if (on) this.#powered = true;
+    else if (this.#powered) {
+      this.#powered = false;
+      this.#spentUntil = Date.now() + POWER_DOWN_MS;
+      setTimeout(() => this.render(), POWER_DOWN_MS + 30).unref();
+    }
+    return on ? "on" : Date.now() < this.#spentUntil ? "spent" : this.#spentUntil ? "rest" : "off";
+  }
+
+  #welcome(fresh: boolean): Node {
+    const hello = greeting(new Date().getHours());
+    const power = this.#power();
+    const sig = `${this.#claudeVersion}|${hello}|${power}|${fresh}|${this.#accountLine()}`;
+    if (this.#welcomeNode?.sig !== sig) this.#welcomeNode = { sig, node: welcome({ name: PROFILE.name, version: VERSION, claudeVersion: this.#claudeVersion, tip: this.#tip, account: this.#accountLine(), greeting: hello, power, fresh }) };
     return this.#welcomeNode.node;
   }
 
@@ -1509,7 +1521,7 @@ export class App {
     const built = this.#transcript.build(conv, ctx);
     const blocks = new Set(built.map(node => String(node.props["key"])));
     const rewind = this.#rewind;
-    const main: Node[] = [this.#mainHead.top, this.#welcome(), this.#mainHead.gap, ...built];
+    const main: Node[] = [this.#mainHead.top, this.#welcome(built.length === 0), this.#mainHead.gap, ...built];
     const approval = this.#approvals[0];
     const above = approval
       ? approvalPanel(
@@ -1619,6 +1631,12 @@ export class App {
     if (agentPane) layer.push(agentPane);
     // The conversation and the composer move over while the pane is beside them.
     const paneStyle = agentPane ? paneCss(paneAt) : "";
+    // The powered-up Clawd's art travels only while Ultracode is on.
+    const flare = this.conv.ultracode || Date.now() < this.#spentUntil;
+    if (flare !== this.#flareStyled && this.#session.caps.features.includes("styles")) {
+      this.#flareStyled = flare;
+      this.#surface.stylesheet("claude-tsp-flare", flare ? flareCss() : null);
+    }
     if (paneStyle !== this.#paneStyled && this.#session.caps.features.includes("styles")) {
       this.#paneStyled = paneStyle;
       this.#surface.stylesheet("claude-tsp-pane", paneStyle || null);

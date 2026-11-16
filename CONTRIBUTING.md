@@ -89,9 +89,19 @@ newest Claude Code and opens an issue when it fails.
 
 `npm test` runs the unit tests. `tools/verify.sh` drives real sessions in
 headless Tern (`tern serve` and `tern ctl`) and checks the live document; it
-needs a signed-in Claude Code and takes about 40 minutes, so it is run by hand
-before a release and its output kept in `docs/VERIFY.txt`. Do not rebuild
-`dist/` or edit the script while it runs.
+needs a signed-in Claude Code, so it is run by hand: all of it before a
+feature release (about 4 minutes, output kept in `docs/VERIFY.txt`), the
+sections a fix touches before a patch. Do not rebuild `dist/` or edit the
+script while it runs.
+
+The script is made of sections (`tools/verify.sh --list`). Each is one session
+with its own Tern, folders and state under `/tmp/ctsp-verify/NAME`, which is
+what lets them run side by side: a check must not reach outside its section's
+folders (`$W`, `$DEMO`, `$OTHER`) or look at processes other than its own. Put
+a new check in the section whose session it needs, and only when it needs a
+live session; anything else is a unit test. A new section is a function
+`s_NAME` plus its name in `SECTIONS`, `LONGEST_FIRST` and `about`. A section
+that stops before its end counts as a failure.
 
 For a look: `tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"`, then
 `tools/serve.sh ctl a shot name` and open the picture under `tools/out/`.

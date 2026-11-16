@@ -1,19 +1,46 @@
 #!/usr/bin/env bash
 # End-to-end verification in headless Tern: drives real sessions and checks the
-# live document. Prints one PASS/FAIL line per check and a count at the end.
-#   tools/verify.sh            the claude-pi profile on its free local model, then the stock path on Haiku
+# live document. Every section is a session of its own, with its own Tern, its
+# own folders and its own state, so sections run side by side and any of them
+# can be run alone.
+#   tools/verify.sh                every section, four at a time
+#   tools/verify.sh update stock   only these sections
+#   tools/verify.sh -j 1           one at a time
+#   tools/verify.sh --list         the sections and what each covers
+# Prints each section's PASS/FAIL lines, in a fixed order, and a count at the
+# end; progress goes to stderr. Exits 1 when a check failed or a section died.
 # Needs: tern, claude-pi installed and signed in, the local model reachable.
 set -u
 cd "$(dirname "$0")/.."
-D=tools; S=v; DEMO=/tmp/ctsp-verify; TRACE=/tmp/ctsp-verify.trace
+D=tools; SELF="$PWD/tools/verify.sh"
+# In report order.
+SECTIONS="local edits stock signin retry widgets native hosted plugins update"
+# In starting order: the longest first, so the run is as long as the longest section and no longer.
+LONGEST_FIRST="local edits native plugins hosted stock signin update widgets retry"
+about() { case "$1" in
+  local) echo "claude-pi-tsp on the local model: approvals, background commands, a question, the agents pane, !commands, /btw, effort, the command dialogs, /compact" ;;
+  edits) echo "claude-pi-tsp on the local model: edits and rewind, the tree, queued messages, /resume, /trace, stopping a turn, /tui, the themes" ;;
+  stock) echo "claude-tsp, stock binary and prompt, Haiku: effort and Ultracode, plan mode, suggestions, an MCP form, a failing hook" ;;
+  signin) echo "sign-in, /ide and the settings that restart Claude Code, in a scratch config" ;;
+  retry) echo "an overloaded API: the retry countdown and the recovery" ;;
+  widgets) echo "a plugin's band, pane and log line" ;;
+  native) echo "commands that used to open Claude Code's own UI: sandbox, stats, GitHub Actions setup, /diff, /cd, the settings screen" ;;
+  hosted) echo "stock Haiku with non-essential traffic on: permission rules, /subtask, /background, /feedback, /remote-control" ;;
+  plugins) echo "plugins from a marketplace and the provider setups, in a scratch config" ;;
+  update) echo "updates of claude-tsp, /doctor's check, the folded composer, --check-compat" ;;
+  *) return 1 ;;
+esac; }
 pass=0; fail=0; nshot=0
 ctl() { "$D/serve.sh" ctl $S "$@"; }
 key() { for k in "$@"; do ctl key "$k" >/dev/null; done; }
 # Moves the settings screen's focus down to the row whose label starts with NAME (the document is read a moment after each key).
 to_row() { local n=0; while [ $n -lt 30 ]; do ctl key Down >/dev/null; sleep 0.7; case "$(ctl tree '.pf-row.focus .pf-lbl' 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);print((d.get("nodes") or [{}])[0].get("text",""))' 2>/dev/null)" in "$1"*) return 0 ;; esac; n=$((n+1)); done; return 1; }
-say() { ctl key ctrl+u >/dev/null; ctl type "\"$1\"" >/dev/null; ctl key Enter >/dev/null; sleep "${2:-6}"; }
+# Text and the Enter after it travel separately, and on a busy machine Enter can come first and find nothing to
+# send: wait until the composer shows the text. (Never press Enter a second time: a panel may have opened by then.)
+typed() { local n=0; while [ $n -lt 12 ] && [ "$(count '.sf-editor.empty')" -gt 0 ]; do sleep 0.2; n=$((n+1)); done; }
+say() { ctl key ctrl+u >/dev/null; ctl type "\"$1\"" >/dev/null; typed; ctl key Enter >/dev/null; sleep "${2:-6}"; }
 # Presses choice N of the approval or question panel once it is there; a missing panel is a failure of its own.
-approve() { if until_ "$APPROVAL" "${2:-45}"; then sleep 1; ctl key "$1" >/dev/null; else fail=$((fail+1)); nshot=$((nshot+1)); ctl shot "verify-fail-$nshot" >/dev/null; echo "FAIL  (no approval panel appeared; shot verify-fail-$nshot)"; fi; }
+approve() { if until_ "$APPROVAL" "${2:-45}"; then sleep 1; ctl key "$1" >/dev/null; else fail=$((fail+1)); nshot=$((nshot+1)); ctl shot "verify-$NAME-fail-$nshot" >/dev/null; echo "FAIL  (no approval panel appeared; shot verify-$NAME-fail-$nshot)"; tell "FAIL  no approval panel appeared"; fi; }
 count() { ctl tree "$1" 2>/dev/null | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("count",0))
 except Exception: print(0)'; }
@@ -30,7 +57,7 @@ except Exception: print("")'; }
 # Waits until a node matching SEL has TEXT in it, polling fast (a retry wait can be short).
 until_text() { local n=0; while [ $n -lt "${3:-60}" ]; do case "$(text "$1")" in *"$2"*) return 0 ;; esac; sleep 0.3; n=$((n+1)); done; return 1; }
 lacks() { case "$(text "$2")" in *"$3"*) ok "$1" 0 "found '$3'" ;; *) ok "$1" 1 ;; esac; }
-ok() { if [ "$2" = 1 ]; then pass=$((pass+1)); echo "PASS  $1"; else fail=$((fail+1)); nshot=$((nshot+1)); ctl shot "verify-fail-$nshot" >/dev/null; echo "FAIL  $1   ${3:-}  (shot verify-fail-$nshot)"; fi; }
+ok() { if [ "$2" = 1 ]; then pass=$((pass+1)); echo "PASS  $1"; else fail=$((fail+1)); nshot=$((nshot+1)); ctl shot "verify-$NAME-fail-$nshot" >/dev/null; echo "FAIL  $1   ${3:-}  (shot verify-$NAME-fail-$nshot)"; tell "FAIL  $1"; fi; }
 # Clicks the button whose text starts with LABEL.
 press() { local at; at=$(ctl tree 'button' 2>/dev/null | python3 -c 'import json,sys
 want=sys.argv[1]
@@ -47,15 +74,18 @@ idle() { sleep 2; local n=0; while [ $n -lt "${1:-60}" ]; do
     [ "$(count '[data-role="omp.working"]')" -eq 0 ] && break
     [ "$(count '[data-role="omp.approval.title"]')" -gt 0 ] && ctl key ctrl+Enter >/dev/null
     sleep 1; n=$((n+1)); done; sleep 1; }
-start() { "$D/serve.sh" stop $S; rm -f $TRACE; "$D/serve.sh" start $S $DEMO "CLAUDE_TSP_TRACE=$TRACE $1"; until_ '[data-role="omp.composer.model"]' 30; sleep 3; }
+start() { "$D/serve.sh" stop $S; rm -f $TRACE; "$D/serve.sh" start $S $DEMO "TMPDIR=$W/tmp CLAUDE_TSP_HOME=$TSPHOME CLAUDE_TSP_TRACE=$TRACE $1"; until_ '[data-role="omp.composer.model"]' 30; sleep 3; }
+seen() { local n=0; while [ $n -lt "${3:-20}" ]; do ctl tree 2>/dev/null | grep -qF "$2" && { ok "$1" 1; return; }; sleep 1; n=$((n+1)); done; ok "$1" 0 "never saw '$2'"; }
+cmd() { ctl key ctrl+u >/dev/null; ctl type "\"$1\"" >/dev/null; typed; ctl key Enter >/dev/null; sleep "${2:-2}"; }
+# The newest Claude Code process the surface runs with config directory DIR (other sessions are running too).
+child() { local p; for p in $(pgrep -f 'input-format stream-json'); do tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qxF "CLAUDE_CONFIG_DIR=$1" && echo "$p"; done | tail -1; }
+tell() { [ -n "${VERIFY_TELL:-}" ] && echo "[$NAME] $1" >&3; return 0; }
 OPEN='.sf-region.sf-layer .sf-picker, .sf-region.sf-layer .sf-overlay, .sf-region.sf-layer .pf'
 USER='[data-role="omp.user"]'; PICK='.sf-picker, [data-kind="picker"], .pk'; APPROVAL='[data-role="omp.editor.ask.approval"]'
+# A session the user starts is not inside another Claude Code session; the settings editor refuses one that is.
+OUTSIDE="env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_PID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_EXECPATH"
 
-rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/display.json"
-rm -rf $DEMO /tmp/ctsp-verify2; mkdir -p $DEMO /tmp/ctsp-verify2; printf 'def add(a, b):\n    return a + b\n\nprint(add(2, 3))\n' > $DEMO/calc.py
-SLUG="$HOME/.claude/projects/-tmp-ctsp-verify"
-
-echo "== claude-pi-tsp, local model"
+s_local() {
 start "claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
 has "starts: welcome, model chip, mode pill" '[data-role="omp.welcome"]'
 says "the local model is named" '[data-role="omp.composer.model"]' "DeepSeek"
@@ -87,7 +117,7 @@ says "a question panel" "$APPROVAL" "Which color?"
 approve 2 5; idle 40
 says "the answer is recorded on the card" '[data-role="omp.tool.askuserquestion"]' "Blue"
 
-say "Launch one Agent (description: inspect calc) with prompt: Read /tmp/ctsp-verify/calc.py and report what it would print. Reply done." 5
+say "Launch one Agent (description: inspect calc) with prompt: Read $DEMO/calc.py and report what it would print. Reply done." 5
 idle 90
 say "Create two tasks with TaskCreate named alpha and beta, then mark alpha in_progress with TaskUpdate. Reply done." 5
 idle 60
@@ -134,7 +164,8 @@ hasnt "and no Ultracode switch" '[data-role="claude.effort.ultracode"]'
 key Escape; sleep 1
 hasnt "Esc closes the dialog and changes nothing" '[data-role="omp.overlay.effort"]'
 
-for cmd in model mode context usage status mcp permissions agents todos skills output-style resume fork tree copy outline settings help doctor hooks memory plugin; do
+# The dialogs no other check opens (/agents, /tree, /resume, /settings, /doctor, /hooks, /plugin and /permissions are used further on).
+for cmd in model mode context usage status mcp todos skills output-style fork copy outline help memory; do
   ctl key ctrl+u >/dev/null; ctl type "\"/$cmd\"" >/dev/null; key Enter; until_ "$OPEN" 12
   n=$(count "$OPEN")
   key Escape; sleep 1; m=$(count "$OPEN")
@@ -145,10 +176,10 @@ say "/statusline" 3; until_ '[data-role="claude.status.line"]' 20
 says "Claude Code's own status line is drawn when switched on" '[data-role="claude.status.line"]' "DeepSeek"
 say "/statusline" 3; hasnt "and leaves when switched off" '[data-role="claude.status.line"]'
 say "/plugin" 3; says "/plugin lists the plugin given on the command line" '.sf-region.sf-layer .sf-picker' "pi-harness"; key Escape; sleep 1
-say "/add-dir /tmp/ctsp-verify2" 3; until_ '[data-role="omp.composer.model"]' 30; sleep 3
-say "/permissions" 5; says "/add-dir adds the folder" '.sf-region.sf-layer' "ctsp-verify2"; key Escape
+say "/add-dir $OTHER" 3; until_ '[data-role="omp.composer.model"]' 30; sleep 3
+say "/permissions" 5; says "/add-dir adds the folder" '.sf-region.sf-layer' "$NAME/other"; key Escape
 say "/rename verify run" 3; says "/rename names the session" '[data-role="omp.status.session"]' "verify run"
-say "/export /tmp/ctsp-verify-export.md" 2; [ -s /tmp/ctsp-verify-export.md ] && ok "/export writes the conversation" 1 || ok "/export writes the conversation" 0
+say "/export $W/export.md" 2; [ -s $W/export.md ] && ok "/export writes the conversation" 1 || ok "/export writes the conversation" 0
 say "/attach $PWD/../pi-tsp-public/docs/pi-tsp-settings.png" 2
 has "an attached image chip" '[data-role="omp.composer.chip"]'
 say "Which of these words can you read in this screenshot: Session, Banana, Display? Answer with the ones you see." 2; idle 60
@@ -158,7 +189,12 @@ say "/compact" 3; until_ '[data-role="omp.compaction"]' 60
 has "/compact leaves a compaction row" '[data-role="omp.compaction"]'
 idle 30; say "What was the code word? One word." 2; idle 40
 says "the code word survives compaction" '[data-role="omp.assistant"]' "PAPAYA"
+}
 
+s_edits() {
+start "claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
+# A first conversation, for /clear to empty and /resume to come back to.
+say "Reply with the single word ready." 2; idle 40
 say "/clear" 5; hasnt "/clear empties the transcript" "$USER"
 say "Use Write to create f1.txt containing the single word one. Reply ok." 3; approve 2 30; idle 40
 say "Use Edit to change one to two in f1.txt. Reply ok." 3; idle 40
@@ -176,7 +212,8 @@ say "/settings" 3; to_row "Messages while"; key Right; sleep 1; key Escape; slee
 say "Call the Bash tool once, foreground, with exactly: for i in 1 2 3 4 5 6; do echo t \$i; sleep 3; done" 3; approve 1; sleep 4
 ctl type '"and then say LATER"' >/dev/null; key Enter; sleep 2
 titled "Settings: Enter during a turn can queue for after it" '[data-role="omp.queue.item"]' "Sent after this turn"
-idle 60; sleep 3; idle 60
+# The queued message starts a turn of its own a moment after the first ends: wait for its answer, not for a quiet moment.
+idle 60; until_text '[data-role="omp.assistant"]' "LATER" 300; idle 60
 says "the queued message is sent when the turn ends" '[data-role="omp.assistant"]' "LATER"
 say "/resume" 3; key Down Enter; until_ '[data-role="omp.composer.model"]' 30; sleep 5
 has "/resume redraws another session" '[data-role="omp.compaction"], [data-role="omp.user"]'
@@ -206,10 +243,10 @@ say "/theme" 3
 OWN="$(color '[data-role="claude.composer.mode"] .sf-text')"
 [ -n "$OWN" ] && [ "$OWN" != "$DARK" ] && ok "/theme hands the accent back to the Tern theme" 1 || ok "/theme hands the accent back to the Tern theme" 0 "got $OWN"
 say "/theme" 3; ctl appearance light >/dev/null; sleep 1
-[ -s $TRACE ] && ok "no TSP errors (claude-pi run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (claude-pi run)" 1
+}
 
-echo "== claude-tsp, stock binary and prompt, Haiku"
-cat > /tmp/ctsp-verify-mcp.mjs <<'EOF'
+s_stock() {
+cat > $W/mcp.mjs <<'EOF'
 import { createInterface } from "node:readline";
 const send = m => process.stdout.write(JSON.stringify(m) + "\n");
 let pending = null;
@@ -222,11 +259,11 @@ createInterface({ input: process.stdin }).on("line", line => {
   else if (m.id !== undefined && m.method) send({ jsonrpc: "2.0", id: m.id, result: {} });
 });
 EOF
-echo '{"mcpServers":{"asker":{"command":"node","args":["/tmp/ctsp-verify-mcp.mjs"]}}}' > /tmp/ctsp-verify-mcp.json
-cat > /tmp/ctsp-verify-settings.json <<'EOF'
+echo "{\"mcpServers\":{\"asker\":{\"command\":\"node\",\"args\":[\"$W/mcp.mjs\"]}}}" > $W/mcp.json
+cat > $W/settings.json <<'EOF'
 {"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":""},"hooks":{"PreToolUse":[{"matcher":"Read","hooks":[{"type":"command","command":"echo style check failed >&2; exit 1"}]}]}}
 EOF
-start "CLAUDE_CONFIG_DIR=$HOME/.claude-pi claude-tsp --model haiku --permission-mode plan --mcp-config /tmp/ctsp-verify-mcp.json --settings /tmp/ctsp-verify-settings.json"
+start "CLAUDE_CONFIG_DIR=$HOME/.claude-pi claude-tsp --model haiku --permission-mode plan --mcp-config $W/mcp.json --settings $W/settings.json"
 says "the stock profile is named Claude Code" '[data-role="omp.welcome"]' "Claude Code"
 says "a Claude model is named" '[data-role="omp.composer.model"]' "Haiku"
 say "/effort" 2
@@ -235,7 +272,7 @@ key Tab; sleep 1; key s; sleep 3
 has "Tab turns Ultracode on in the dialog and S applies it to the session" '[data-role="claude.composer.ultracode"]'
 say "/effort low" 3
 has "Ultracode stays on when the level changes" '[data-role="claude.composer.ultracode"]'
-say "/add-dir /tmp/ctsp-verify2" 3; until_ '[data-role="omp.composer.model"]' 30; sleep 5
+say "/add-dir $OTHER" 3; until_ '[data-role="omp.composer.model"]' 30; sleep 5
 has "Ultracode is put back when the surface restarts Claude Code's process" '[data-role="claude.composer.ultracode"]'
 say "/effort ultracode off" 3
 hasnt "/effort ultracode off turns it off" '[data-role="claude.composer.ultracode"]'
@@ -259,28 +296,30 @@ ctl type '"tern-demo"' >/dev/null; key Enter; idle 40
 says "the form's answer reached the tool" '[data-role="omp.assistant"], [data-role="omp.tool.mcp"]' "tern-demo"
 say "Use the Read tool on calc.py and tell me its first line." 3; idle 40
 says "a failing hook leaves a warning line" '[data-role="omp.notice.warning"]' "hook"
-[ -s $TRACE ] && ok "no TSP errors (stock run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (stock run)" 1
-echo "== sign-in and retries"
-rm -rf /tmp/ctsp-verify-auth; mkdir -p /tmp/ctsp-verify-auth
-start "CLAUDE_CONFIG_DIR=/tmp/ctsp-verify-auth BROWSER=/bin/true claude-tsp"
+}
+
+s_signin() {
+mkdir -p $W/auth
+start "CLAUDE_CONFIG_DIR=$W/auth BROWSER=/bin/true claude-tsp"
 say "hello" 3; until_ '[data-role="omp.error"]' 30
 says "without a sign-in the error card offers one" '[data-role="omp.error"]' "Sign in"
 say "/login" 2; until_ '[data-role="omp.overlay.hook-input"]' 20
 says "/login opens the sign-in dialog with Claude's link" '[data-role="omp.overlay.hook-input"]' "oauth/authorize"
 ctl type '"not-a-real-code"' >/dev/null; key Enter; until_ '[data-role="omp.overlay.hook-input"]' 30 gone
 hasnt "a wrong code is refused and the dialog closes" '[data-role="omp.overlay.hook-input"]'
-[ ! -e /tmp/ctsp-verify-auth/.credentials.json ] && ok "a wrong code writes no credentials" 1 || ok "a wrong code writes no credentials" 0
-sleep 600 & IDE=$!; mkdir -p /tmp/ctsp-verify-auth/ide
-echo "{\"pid\":$IDE,\"ideName\":\"Test IDE\",\"workspaceFolders\":[\"$DEMO\"]}" > /tmp/ctsp-verify-auth/ide/59999.lock
+[ ! -e $W/auth/.credentials.json ] && ok "a wrong code writes no credentials" 1 || ok "a wrong code writes no credentials" 0
+sleep 600 & IDE=$!; mkdir -p $W/auth/ide
+echo "{\"pid\":$IDE,\"ideName\":\"Test IDE\",\"workspaceFolders\":[\"$DEMO\"]}" > $W/auth/ide/59999.lock
 say "/ide" 3; says "/ide lists an IDE that announces the extension" '.sf-region.sf-layer .sf-picker' "Test IDE"; key Escape; sleep 1; kill $IDE 2>/dev/null
 say "/settings" 3; to_row "Auto-compact"; key Enter; sleep 3; until_ '[data-role="omp.composer.model"]' 40; sleep 4; key Escape; sleep 1
-CHILD="$(pgrep -n -f 'input-format stream-json' || true)"
+CHILD="$(child $W/auth)"
 tr '\0' '\n' < "/proc/$CHILD/environ" 2>/dev/null | grep -q '^DISABLE_AUTO_COMPACT=1$' && ok "Settings: auto-compact off restarts Claude Code without it" 1 || ok "Settings: auto-compact off restarts Claude Code without it" 0 "child $CHILD"
 say "/settings" 3; to_row "Auto-retry"; key Enter; sleep 3; until_ '[data-role="omp.composer.model"]' 40; sleep 4; key Escape; sleep 1
-CHILD="$(pgrep -n -f 'input-format stream-json' || true)"
+CHILD="$(child $W/auth)"
 tr '\0' '\n' < "/proc/$CHILD/environ" 2>/dev/null | grep -q '^CLAUDE_CODE_MAX_RETRIES=0$' && ok "Settings: auto-retry off restarts Claude Code without retries" 1 || ok "Settings: auto-retry off restarts Claude Code without retries" 0 "child $CHILD"
-rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/display.json"
-[ -s $TRACE ] && ok "no TSP errors (sign-in run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (sign-in run)" 1
+}
+
+s_retry() {
 node "$D/overload-proxy.mjs" 18531 3 & PROXY=$!
 start "ANTHROPIC_BASE_URL=http://127.0.0.1:18531 claude-pi-tsp --model haiku"
 ctl key ctrl+u >/dev/null; ctl type '"Reply with the single word RECOVERED."' >/dev/null; ctl key Enter >/dev/null
@@ -288,11 +327,9 @@ until_text '[data-role="omp.working.label"]' "Retrying" 80 && ok "an overloaded 
 idle 90
 says "the turn recovers and says so" '[data-role="omp.assistant.abort"]' "Recovered after"
 says "the answer arrives after the retries" '[data-role="omp.assistant"]' "RECOVERED"
-[ -s $TRACE ] && ok "no TSP errors (retry run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (retry run)" 1
-kill $PROXY 2>/dev/null
-"$D/serve.sh" stop $S
+}
 
-echo "== plugin widgets"
+s_widgets() {
 start "claude-pi-tsp --model claude-haiku-4-5 --plugin-dir $PWD/test/fixtures/widget-plugin"
 until_ '[data-role="claude.plugin.band"]' 30
 says "a plugin's band is drawn above the composer" '[data-role="claude.plugin.band"]' "count 0"
@@ -308,17 +345,11 @@ says "the open pane keeps a tab by the band" '[data-role="claude.plugin.band"]' 
 ctl key ctrl+u >/dev/null; ctl type '"/widgets"' >/dev/null; ctl key Enter >/dev/null; sleep 2
 ctl type '"Notify"' >/dev/null; ctl key Enter >/dev/null; sleep 3
 ctl tree 2>/dev/null | grep -q "tsp-widget: widget logged a line" && ok "a plugin's log line lands in the transcript" 1 || ok "a plugin's log line lands in the transcript" 0
-[ -s $TRACE ] && ok "no TSP errors (widget run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (widget run)" 1
-"$D/serve.sh" stop $S
-rm -rf "$SLUG" "$HOME/.claude/projects/-tmp-ctsp-verify2" /tmp/ctsp-verify-export.md /tmp/ctsp-verify-auth
-rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/display.json"
-echo "== commands that used to open Claude Code's own UI"
-# A session the user starts is not inside another Claude Code session; the settings editor refuses one that is.
-OUTSIDE="env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_PID -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_EXECPATH"
-GHD=/tmp/ctsp-verify-gh; rm -rf $GHD $DEMO/.claude/settings.local.json
+}
+
+s_native() {
+GHD=$W/gh
 start "GH_FAKE_DIR=$GHD CLAUDE_TSP_GH=$PWD/test/fixtures/fake-gh/gh $OUTSIDE claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
-seen() { local n=0; while [ $n -lt "${3:-20}" ]; do ctl tree 2>/dev/null | grep -qF "$2" && { ok "$1" 1; return; }; sleep 1; n=$((n+1)); done; ok "$1" 0 "never saw '$2'"; }
-cmd() { ctl key ctrl+u >/dev/null; ctl type "\"$1\"" >/dev/null; ctl key Enter >/dev/null; sleep "${2:-2}"; }
 cmd /sandbox 3
 seen "/sandbox draws Claude Code's sandbox state" "Unsandboxed fallback: allowed"
 ctl key Down >/dev/null; ctl key Enter >/dev/null; sleep 4
@@ -362,13 +393,12 @@ done
 cmd /rate-limit-options 3
 seen "/rate-limit-options lists what can be done about a limit" "See what is using the limits"
 ctl key Escape >/dev/null; sleep 1
-mkdir -p /tmp/ctsp-verify2
-cmd "/cd /tmp/ctsp-verify2" 4
+cmd "/cd $OTHER" 4
 ctl tree 2>/dev/null | grep -qF "Do you trust this folder?" && { ctl key Down >/dev/null; ctl key Enter >/dev/null; sleep 4; }
-seen "/cd moves the session to another folder" "Moved to /tmp/ctsp-verify2"
+seen "/cd moves the session to another folder" "Moved to $OTHER"
 cmd "!touch cd-proof.txt" 5
-[ -e /tmp/ctsp-verify2/cd-proof.txt ] && ok "commands then run in the new folder" 1 || ok "commands then run in the new folder" 0
-rm -f /tmp/ctsp-verify2/cd-proof.txt
+[ -e $OTHER/cd-proof.txt ] && ok "commands then run in the new folder" 1 || ok "commands then run in the new folder" 0
+rm -f $OTHER/cd-proof.txt
 cmd "/cd $DEMO" 4
 ctl tree 2>/dev/null | grep -qF "Do you trust this folder?" && { ctl key Down >/dev/null; ctl key Enter >/dev/null; sleep 4; }
 ctl key alt+x >/dev/null
@@ -377,7 +407,6 @@ cmd /settings 3
 seen "the settings screen lists Claude Code's own switches" "Idle compaction" 8
 top=$(ctl tree 2>/dev/null | python3 -c 'import sys,re;d=sys.stdin.read();a=re.search(r"\"class\":\"pf-doc[^\"]*\"[^{}]*?\"rect\":\[[^,]*,([^,]*)",d);b=re.search(r"\"class\":\"pf-head[^\"]*\"[^{}]*?\"rect\":\[[^,]*,([^,]*)",d);print(1 if a and b and float(a.group(1))>=float(b.group(1))-1 else 0)')
 ok "the settings screen opens at its top, nothing under the header" "${top:-0}"
-focused() { ctl tree '.pf-row.focus .pf-lbl' 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);print((d.get("nodes") or [{}])[0].get("text","")[:20])'; }
 to_row "ModeWhat"
 ctl key Enter >/dev/null; sleep 1
 seen "a settings dropdown opens its menu" "File edits are applied without asking" 6
@@ -391,10 +420,12 @@ ctl key Escape >/dev/null; sleep 1
 cmd /hooks 1; n=0; while [ $n -lt 20 ]; do ctl tree 2>/dev/null | grep -qF "Search hooks" && break; sleep 1; n=$((n+1)); done; sleep 1; ctl key ctrl+e >/dev/null
 seen "hooks are edited in a settings file chosen here" "Edit hooks in which settings?"
 ctl key Escape >/dev/null; sleep 1
-[ -s $TRACE ] && ok "no TSP errors (native commands run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (native commands run)" 1
+}
+
+s_hosted() {
 # claude-pi's settings switch non-essential traffic off, which also switches off remote control and feedback: this session has it on.
-echo '{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"","DISABLE_TELEMETRY":""}}' > /tmp/ctsp-verify-traffic.json
-start "$OUTSIDE -u CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CONFIG_DIR=$HOME/.claude-pi claude-tsp --model haiku --permission-mode default --settings /tmp/ctsp-verify-traffic.json"
+echo '{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"","DISABLE_TELEMETRY":""}}' > $W/traffic.json
+start "$OUTSIDE -u CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CONFIG_DIR=$HOME/.claude-pi claude-tsp --model haiku --permission-mode default --settings $W/traffic.json"
 cmd /permissions 4; ctl key ctrl+n >/dev/null; sleep 2; ctl type '"Bash(ctsp-verify-rule:*)"' >/dev/null; ctl key Enter >/dev/null; sleep 2
 seen "a new permission rule asks where to be saved" "Local settings (this project, only you)"
 ctl key Enter >/dev/null; sleep 1
@@ -427,10 +458,10 @@ cmd "/remote-control off" 5
 ctl key ctrl+u >/dev/null; ctl type '"/remote-c"' >/dev/null; sleep 2
 ctl tree 2>/dev/null | grep -qF '"text":"on"' && ok "/remote-control off disconnects" 0 || ok "/remote-control off disconnects" 1
 ctl key Escape >/dev/null; ctl key ctrl+u >/dev/null; sleep 1
-[ -s $TRACE ] && ok "no TSP errors (permissions run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (permissions run)" 1
+}
 
-echo "== plugins from a marketplace, in a scratch config"
-PLUG=/tmp/ctsp-verify-plug; MARKET=/tmp/ctsp-verify-market; rm -rf $PLUG $MARKET; mkdir -p $PLUG $MARKET/.claude-plugin; cp -r test/fixtures/widget-plugin $MARKET/widget-plugin
+s_plugins() {
+PLUG=$W/plug; MARKET=$W/market; mkdir -p $PLUG $MARKET/.claude-plugin; cp -r test/fixtures/widget-plugin $MARKET/widget-plugin
 echo '{ "name": "ctsp-verify-market", "owner": { "name": "claude-tsp tests" }, "plugins": [ { "name": "tsp-widget", "source": "./widget-plugin", "description": "A band, a pane and a notification for testing a host" } ] }' > $MARKET/.claude-plugin/marketplace.json
 installed() { CLAUDE_CONFIG_DIR=$PLUG $OUTSIDE claude plugin list --json 2>/dev/null | tr -d '\n '; }
 start "$OUTSIDE CLAUDE_CONFIG_DIR=$PLUG claude-tsp"
@@ -452,16 +483,13 @@ grep -q '"CLAUDE_CODE_USE_VERTEX": "1"' $PLUG/settings.json 2>/dev/null && grep 
 until_ '[data-role="omp.composer.model"]' 30; sleep 2
 cmd /setup-bedrock 3; ctl key Enter >/dev/null; sleep 2; ctl type '"us-west-2"' >/dev/null; ctl key Enter >/dev/null; sleep 2; ctl key Enter >/dev/null; sleep 2; ctl key Enter >/dev/null; sleep 8
 grep -q '"CLAUDE_CODE_USE_BEDROCK": "1"' $PLUG/settings.json 2>/dev/null && ! grep -q "USE_VERTEX" $PLUG/settings.json && ok "/setup-bedrock replaces it: one provider at a time" 1 || ok "/setup-bedrock replaces it: one provider at a time" 0
-[ -s $TRACE ] && ok "no TSP errors (plugin run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (plugin run)" 1
-"$D/serve.sh" stop $S
-rm -rf $GHD $PLUG $MARKET /tmp/ctsp-verify-traffic.json $DEMO/.claude/settings.local.json
+}
 
-echo "== updates of claude-tsp, and the Claude Code check"
+s_update() {
 # A release feed of its own, so the check never depends on what GitHub has.
-FEED=/tmp/ctsp-verify-feed; rm -rf $FEED; mkdir -p $FEED
+FEED=$W/feed; mkdir -p $FEED
 printf '[{"tag_name":"v99.0.0","html_url":"https://example.invalid/v99.0.0","published_at":"2030-01-01T00:00:00Z","body":"## [99.0.0]\\n\\n### Added\\n- A verify-only release.","assets":[]}]' > $FEED/releases.json
 ( cd $FEED && exec python3 -m http.server 18532 --bind 127.0.0.1 >/dev/null 2>&1 ) & FEEDPID=$!
-rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/update.json"
 start "CLAUDE_TSP_NO_UPDATE_CHECK=0 CLAUDE_TSP_RELEASES_URL=http://127.0.0.1:18532/releases.json $OUTSIDE claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
 until_ '[data-role="claude.status.update"]' 20
 says "a newer release shows among the composer's facts" '[data-role="claude.status.update"]' "99.0.0"
@@ -478,10 +506,54 @@ ctl split right >/dev/null; sleep 2
 [ "$(ctl dump '[data-role="omp.composer.effort"]' 2>/dev/null | python3 -c 'import json,sys
 try: print(json.load(sys.stdin)["elements"][0]["opacity"])
 except Exception: print("")')" = "0" ] && ok "an unfocused pane folds the composer and Claude's chips fade with it" 1 || ok "an unfocused pane folds the composer and Claude's chips fade with it" 0
-[ -s $TRACE ] && ok "no TSP errors (update run)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors (update run)" 1
-"$D/serve.sh" stop $S
-kill $FEEDPID 2>/dev/null; rm -rf $FEED; rm -f "${CLAUDE_TSP_HOME:-/tmp/ctsp-home}/update.json"
-$OUTSIDE node bin/claude-tsp --check-compat > /tmp/ctsp-verify-compat.txt 2>&1 && ok "claude-tsp --check-compat passes from a shell" 1 || ok "claude-tsp --check-compat passes from a shell" 0 "$(tail -3 /tmp/ctsp-verify-compat.txt | tr '\n' ' ')"
-rm -f /tmp/ctsp-verify-compat.txt
+kill $FEEDPID 2>/dev/null
+$OUTSIDE node bin/claude-tsp --check-compat > $W/compat.txt 2>&1 && ok "claude-tsp --check-compat passes from a shell" 1 || ok "claude-tsp --check-compat passes from a shell" 0 "$(tail -3 $W/compat.txt | tr '\n' ' ')"
+rm -f $W/compat.txt
+}
 
-echo; echo "$pass passed, $fail failed"
+# One section, in this process: its own Tern (v-NAME), folders under /tmp/ctsp-verify/NAME, and state.
+# The sessions' temporary files go there too, so nothing is left in /tmp when Tern is told to quit.
+one() {
+  NAME=$1; S=v-$NAME; W=/tmp/ctsp-verify/$NAME; DEMO=$W/demo; OTHER=$W/other; TSPHOME=$W/home; TRACE=$W/trace
+  rm -rf "$W"; mkdir -p $DEMO $OTHER $TSPHOME $W/tmp; printf 'def add(a, b):\n    return a + b\n\nprint(add(2, 3))\n' > $DEMO/calc.py
+  trap 'exit 130' INT TERM; trap finish EXIT
+  echo "== $NAME: $(about $NAME)"
+  "s_$NAME"
+  [ -s $TRACE ] && ok "no TSP errors ($NAME)" 0 "$(head -c 300 $TRACE)" || ok "no TSP errors ($NAME)" 1
+  echo "$pass passed, $fail failed, ${SECONDS}s"
+  tell "$pass passed, $fail failed, ${SECONDS}s"
+}
+finish() {
+  "$D/serve.sh" stop $S; kill $(jobs -p) 2>/dev/null; rm -f /tmp/ctsp-$S.log /tmp/ctsp-$S.sock
+  rm -rf "$W" "$HOME/.claude/projects/-tmp-ctsp-verify-$NAME-demo" "$HOME/.claude/projects/-tmp-ctsp-verify-$NAME-other"
+  rmdir /tmp/ctsp-verify 2>/dev/null; return 0
+}
+
+JOBS=4; names=""
+while [ $# -gt 0 ]; do case "$1" in
+  --list) for n in $SECTIONS; do printf '%-8s %s\n' "$n" "$(about $n)"; done; exit 0 ;;
+  --one) about "$2" >/dev/null || { echo "no section named $2" >&2; exit 2; }; one "$2"; exit 0 ;;
+  -j) JOBS=$2; shift 2 ;;
+  -j*) JOBS=${1#-j}; shift ;;
+  *) about "$1" >/dev/null || { echo "no section named $1 (tools/verify.sh --list)" >&2; exit 2; }; names="$names $1"; shift ;;
+esac; done
+[ -n "$names" ] || names=$SECTIONS
+LOGS=$D/out/verify; rm -rf $LOGS; mkdir -p $LOGS
+trap 'kill $(jobs -p) 2>/dev/null; wait; exit 130' INT TERM
+for n in $LONGEST_FIRST; do
+  case " $names " in *" $n "*) ;; *) continue ;; esac
+  while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n; done
+  VERIFY_TELL=1 "$SELF" --one $n 3>&2 > $LOGS/$n.log 2>&1 &
+done
+wait
+pass=0; fail=0; dead=""
+for n in $SECTIONS; do
+  case " $names " in *" $n "*) ;; *) continue ;; esac
+  sum="$(grep -E '^[0-9]+ passed, [0-9]+ failed, [0-9]+s$' $LOGS/$n.log | tail -1)"
+  grep -vE '^[0-9]+ passed, [0-9]+ failed, [0-9]+s$' $LOGS/$n.log
+  # A section that ended without its count did not finish: that is a failure, not a shorter run.
+  if [ -z "$sum" ]; then dead="$dead $n"; echo "FAIL  the $n section stopped before its end"; continue; fi
+  set -- $sum; pass=$((pass+$1)); fail=$((fail+$3))
+done
+echo; echo "$pass passed, $fail failed${dead:+, did not finish:$dead}"
+[ "$fail" -eq 0 ] && [ -z "$dead" ]

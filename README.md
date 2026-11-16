@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/claude-tsp.png" alt="claude-tsp launch surface" width="100%">
+  <img src="docs/claude-tsp.png" alt="The start screen: Clawd in front of a sun of twelve rays, a greeting, and the composer" width="100%">
 </p>
 
 ---
@@ -37,12 +37,17 @@
 |---|---|
 | ![Agents pane](docs/claude-tsp-agents.png) | ![Effort](docs/claude-tsp-effort.png) |
 
-| Models | Settings | Light |
-|---|---|---|
-| ![Models](docs/claude-tsp-models.png) | ![Settings](docs/claude-tsp-settings.png) | ![Light theme](docs/claude-tsp-light.png) |
+| Ultracode on: Clawd powers up | Light |
+|---|---|
+| ![Ultracode](docs/claude-tsp-ultracode.png) | ![Light theme](docs/claude-tsp-light.png) |
+
+| Models | Settings |
+|---|---|
+| ![Models](docs/claude-tsp-models.png) | ![Settings](docs/claude-tsp-settings.png) |
 
 Light and dark follow Tern, as do its themes; the clay accent is Claude's own
-and `/theme` hands the accent back to Tern's.
+and `/theme` hands the accent back to Tern's. What makes it Claude's is shape
+and motion, not a fixed palette: see [Look](#look).
 
 It is a front end, not a fork. `claude-tsp` starts the Claude Code you already
 have and talks to it over its stream-json protocol (`claude -p --input-format
@@ -136,6 +141,13 @@ every task, for this session), Enter confirms and saves the level as your
 default, S keeps it to this session. `/effort high`, `/effort auto` and
 `/effort ultracode on` do the same from the keyboard.
 
+The level shows in the model chip as Claude's spark: the higher the effort,
+the more of its twelve rays are lit, and at `max` all of them burn. Click it,
+or press Alt+E, to step through the levels. Another maker's model keeps its
+own mark beside the gauge.
+
+Turning Ultracode on from the start screen is worth watching once.
+
 ## Updates
 
 claude-tsp asks GitHub once a day whether a newer release is out. When one is,
@@ -176,10 +188,26 @@ change one. Three things watch for that:
 
 ## Look
 
-The surface follows Tern's theme, light or dark, including custom themes. Its
-own identity is Claude's clay as the accent color, the spark mark, and the
-permission-mode pill. `/theme` (or Settings → Display → Claude accent) switches
-the clay off, and the Tern theme's own accent is used instead.
+The surface follows Tern's theme, light or dark, including custom themes, and
+is Claude's by shape and motion:
+
+- **Clawd**, the creature from Claude Code's own start screen, greets you in
+  front of a slow sun of twelve rays. Once a conversation starts it is a still
+  header.
+- **The spark** is the working indicator: its rays breathe while Claude
+  thinks and it turns while a tool runs. The same spark counts working
+  subagents and is the effort gauge in the model chip.
+- **The composer** has light of one colour pooled under it, which swells
+  while Claude works as a line gathers along its lower edge. Send is a disc of
+  the accent once there is something to send.
+- **Ultracode** powers Clawd up, in its own gold and violet on any theme, and
+  powers it down again when you switch it off.
+
+Everything else takes its colour from the theme's accent. Claude's clay is the
+accent by default; `/theme` (or Settings → Display → Claude accent) switches
+it off, and the Tern theme's own accent is used instead. Animation is limited
+to opacity and transforms, stops for what is scrolled away, and honours the
+system's reduced-motion setting.
 
 ## Environment
 
@@ -198,8 +226,9 @@ the clay off, and the Tern theme's own accent is used instead.
 ## Develop
 
 ```sh
-npm test                                  # build + 87 tests
-tools/verify.sh                           # 181 end-to-end checks in headless Tern (about 15 minutes)
+npm test                                  # build + unit tests
+tools/verify.sh                           # every end-to-end section in headless Tern, four at a time (about 4 minutes)
+tools/verify.sh update stock              # only these sections (--list names them)
 tools/serve.sh start a /tmp/demo "$PWD/bin/claude-tsp"   # headless Tern
 tools/say.sh a "hello" 6 shot-name        # type, send, wait, screenshot
 tools/serve.sh stop a
@@ -260,6 +289,12 @@ on other people's work and is not affiliated with any of them:
   the stream-json protocol this surface drives. Claude Code is not patched or
   redistributed here; you install it yourself. The GitHub Actions workflow
   files that `/install-github-app` writes are the ones Claude Code ships.
+  Clawd is Anthropic's creature, redrawn here from the start screen's own
+  block characters.
+- [Tyler Nishida](https://x.com/TylerNishida/status/2121393379389161815) — the
+  clip of Clawd going Super Saiyan under Ultracode, which the powered-up scene
+  here is a tribute to. Its pixel art was drawn for this repository
+  (`tools/sprites.py`).
 - [Tern](https://stencil.so/tern) by Stencil Labs — the terminal and the Tern
   Surface Protocol (TSP), and the `@stencil-hq/tern` SDK this is written on.
 - [oh-my-pi](https://github.com/can1357/oh-my-pi) — the reference TSP client.

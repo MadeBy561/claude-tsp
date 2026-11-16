@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.3.0] - 2026-11-16
+
+The surface gets a look of its own. Until now it was styled as oh-my-pi's is,
+with Claude's clay as the accent. The colours still come from the Tern theme;
+the identity is in shape and motion.
+
+### Added
+
+- **Clawd on the start screen.** The creature from Claude Code's own start
+  screen, redrawn pixel for pixel, stands in front of a slow sun of twelve
+  rays in the theme's accent, over a greeting for the hour. It replaces the
+  clay tile and wordmark, and the dot grid Tern draws behind a fresh composer.
+  Once a conversation starts it is a still header.
+- **Claude's spark as the working indicator.** Its rays breathe while Claude
+  thinks and it turns while a tool runs, in place of the starburst. The same
+  spark marks working subagents in the composer's chip.
+- **The effort gauge.** The model chip shows the effort level as the spark
+  itself: more rays lit the higher the level, all twelve burning at `max`.
+  A Claude model needs no separate logo beside it; other makers' models keep
+  theirs.
+- **Ultracode powers Clawd up.** Switching Ultracode on from the start screen
+  plays a transformation (dust, a flash, then an aura in pixel art with
+  lightning), and switching it off plays it down. The working spark and the
+  composer's light turn gold while it is on.
+- **The composer's own light.** One colour pooled under the card, swelling
+  while Claude works as a line gathers along the lower edge, in place of the
+  four-colour aurora. Send becomes a disc of the accent once there is a draft.
+- `tools/verify.sh` runs its sections side by side: the full end-to-end run
+  takes about four minutes instead of fifteen, and `tools/verify.sh NAME…`
+  runs chosen sections. A section that stops early counts as a failure.
+
+### Fixed
+
+- The permission-mode pill sat a few pixels high and shorter than the model
+  chip beside it since 1.2.1. Both are now the same height on one line.
+- On a narrow composer (a phone) Tern dropped the whole group of Claude's
+  chips, so the mode, including Bypass, was not shown at all. The group now
+  always stays and the model's name shortens instead.
+
 ## [1.2.1] - 2026-11-16
 
 ### Fixed

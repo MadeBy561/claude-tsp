@@ -151,8 +151,8 @@ Beyond `tools/verify.sh`, these were run once by hand with the account's owner (
 ## Verification
 
 `tools/verify.sh` drives both commands in headless Tern and checks the live
-document: 181 checks, each a PASS or FAIL line. The last full run is kept in
-`docs/VERIFY.txt` (2026-11-16, version 1.2.0, Tern 0.9.20): **180 passed, 0 failed**.
+document: 174 checks in ten sections, each a PASS or FAIL line. The last full run is kept in
+`docs/VERIFY.txt` (2026-11-16, version 1.3.0, Tern 0.9.20): **174 passed, 0 failed**.
 `docs/OMP-ROWS.md` lists each of omp's 104 rows with the check or test that
 shows it.
 

@@ -1,4 +1,4 @@
-== claude-pi-tsp, local model
+== local: claude-pi-tsp on the local model: approvals, background commands, a question, the agents pane, !commands, /btw, effort, the command dialogs, /compact
 PASS  starts: welcome, model chip, mode pill
 PASS  the local model is named
 PASS  mode pill
@@ -42,22 +42,14 @@ PASS  /context opens and closes
 PASS  /usage opens and closes
 PASS  /status opens and closes
 PASS  /mcp opens and closes
-PASS  /permissions opens and closes
-PASS  /agents opens and closes
 PASS  /todos opens and closes
 PASS  /skills opens and closes
 PASS  /output-style opens and closes
-PASS  /resume opens and closes
 PASS  /fork opens and closes
-PASS  /tree opens and closes
 PASS  /copy opens and closes
 PASS  /outline opens and closes
-PASS  /settings opens and closes
 PASS  /help opens and closes
-PASS  /doctor opens and closes
-PASS  /hooks opens and closes
 PASS  /memory opens and closes
-PASS  /plugin opens and closes
 PASS  Claude Code's own status line is drawn when switched on
 PASS  and leaves when switched off
 PASS  /plugin lists the plugin given on the command line
@@ -68,6 +60,8 @@ PASS  an attached image chip
 PASS  the model read the image
 PASS  /compact leaves a compaction row
 PASS  the code word survives compaction
+PASS  no TSP errors (local)
+== edits: claude-pi-tsp on the local model: edits and rewind, the tree, queued messages, /resume, /trace, stopping a turn, /tui, the themes
 PASS  /clear empties the transcript
 PASS  an edit changed the file
 PASS  an Edit card with a diff
@@ -89,8 +83,8 @@ PASS  light theme: the accent is Claude's clay
 PASS  dark theme: the clay shifts for a dark page
 PASS  dark theme: text is light on dark
 PASS  /theme hands the accent back to the Tern theme
-PASS  no TSP errors (claude-pi run)
-== claude-tsp, stock binary and prompt, Haiku
+PASS  no TSP errors (edits)
+== stock: claude-tsp, stock binary and prompt, Haiku: effort and Ultracode, plan mode, suggestions, an MCP form, a failing hook
 PASS  the stock profile is named Claude Code
 PASS  a Claude model is named
 PASS  a Claude model has Claude Code's five levels
@@ -107,8 +101,8 @@ PASS  Tab takes the suggestion into the draft
 PASS  an MCP server's form opens
 PASS  the form's answer reached the tool
 PASS  a failing hook leaves a warning line
-PASS  no TSP errors (stock run)
-== sign-in and retries
+PASS  no TSP errors (stock)
+== signin: sign-in, /ide and the settings that restart Claude Code, in a scratch config
 PASS  without a sign-in the error card offers one
 PASS  /login opens the sign-in dialog with Claude's link
 PASS  a wrong code is refused and the dialog closes
@@ -116,19 +110,20 @@ PASS  a wrong code writes no credentials
 PASS  /ide lists an IDE that announces the extension
 PASS  Settings: auto-compact off restarts Claude Code without it
 PASS  Settings: auto-retry off restarts Claude Code without retries
-PASS  no TSP errors (sign-in run)
+PASS  no TSP errors (signin)
+== retry: an overloaded API: the retry countdown and the recovery
 PASS  an overloaded API shows the retry countdown
 PASS  the turn recovers and says so
 PASS  the answer arrives after the retries
-PASS  no TSP errors (retry run)
-== plugin widgets
+PASS  no TSP errors (retry)
+== widgets: a plugin's band, pane and log line
 PASS  a plugin's band is drawn above the composer
 PASS  pressing a plugin's button runs it and the band redraws
 PASS  a pane a plugin opens comes up with what it drew
 PASS  the open pane keeps a tab by the band
 PASS  a plugin's log line lands in the transcript
-PASS  no TSP errors (widget run)
-== commands that used to open Claude Code's own UI
+PASS  no TSP errors (widgets)
+== native: commands that used to open Claude Code's own UI: sandbox, stats, GitHub Actions setup, /diff, /cd, the settings screen
 PASS  /sandbox draws Claude Code's sandbox state
 PASS  a sandbox choice is written by Claude Code's settings editor
 PASS  /stats counts the stored sessions
@@ -156,7 +151,8 @@ PASS  a settings dropdown opens its menu
 PASS  picking in the menu changes the setting
 PASS  /plugin browses the marketplaces
 PASS  hooks are edited in a settings file chosen here
-PASS  no TSP errors (native commands run)
+PASS  no TSP errors (native)
+== hosted: stock Haiku with non-essential traffic on: permission rules, /subtask, /background, /feedback, /remote-control
 PASS  a new permission rule asks where to be saved
 PASS  the rule is written to the settings file
 PASS  Claude Code lists the new rule
@@ -168,22 +164,23 @@ PASS  a report saved locally is written by Claude Code and nothing is sent
 PASS  /remote-control turns it on and gives the session's link
 PASS  the sheet says remote control is on, with Disconnect
 PASS  /remote-control off disconnects
-PASS  no TSP errors (permissions run)
-== plugins from a marketplace, in a scratch config
+PASS  no TSP errors (hosted)
+== plugins: plugins from a marketplace and the provider setups, in a scratch config
 PASS  Add marketplace adds one from the picker
 PASS  Ctrl+O installs the chosen plugin
 PASS  the installed plugin is listed under Yours
 PASS  Ctrl+D uninstalls it
 PASS  /setup-vertex writes the provider to the user's settings
 PASS  /setup-bedrock replaces it: one provider at a time
-PASS  no TSP errors (plugin run)
-== updates of claude-tsp, and the Claude Code check
+PASS  no TSP errors (plugins)
+== update: updates of claude-tsp, /doctor's check, the folded composer, --check-compat
 PASS  a newer release shows among the composer's facts
 PASS  /update shows what the release changes
 PASS  /update says it is the surface it updates, not Claude Code
 PASS  a skipped version is not offered again
 PASS  /doctor's check of the surface passes on this Claude Code
-PASS  no TSP errors (update run)
+PASS  an unfocused pane folds the composer and Claude's chips fade with it
 PASS  claude-tsp --check-compat passes from a shell
+PASS  no TSP errors (update)
 
-180 passed, 0 failed
+174 passed, 0 failed

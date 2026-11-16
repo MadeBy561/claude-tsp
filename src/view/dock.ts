@@ -2,6 +2,7 @@
  * The dock: the working row and task HUD, queued messages, and the composer
  * with its context meter, chips and status facts.
  */
+import { gauge, spark } from "./spark.js";
 import type { TextEditor } from "../editor.js";
 import type { Conversation, Image, Item } from "../model.js";
 import { duration, firstLine, h, money, s, tokens, type EditEvent, type Node, type SendEvent, type Span } from "./h.js";
@@ -83,7 +84,8 @@ function workingRow(conv: Conversation, state: DockState, on: DockActions): Node
       ? "Compacting the conversation"
       : state.activity || "Working";
   return h("row", { key: "working", role: "omp.working", align: "center", gap: "sm", ...(retry ? { title: retry.error } : {}) }, [
-    h("spinner", { key: "spinner", style: "starburst", tone: retry ? "warning" : "accent" }),
+    // What the spark does says what Claude does: a retry waits, Ultracode flares, a tool turns it, thought breathes.
+    spark("spinner", retry ? "warn" : conv.ultracode ? "flare" : state.activity ? "work" : "think"),
     conv.runStartedAt ? h("elapsed", { key: "elapsed", age: Math.max(0, Date.now() - conv.runStartedAt), format: "short" }) : null,
     conv.runStartedAt ? h("text", { key: "sep", text: "·", role: "omp.working.sep" }) : null,
     h("shimmer", { key: "label", role: "omp.working.label", mode: "classic", palette: { low: "dim", mid: "muted", high: "accent" }, spans: [s(label, "muted")] }),
@@ -137,7 +139,7 @@ function agentsChip(conv: Conversation, on: DockActions): Node | null {
   if (!agents.length) return null;
   const running = agents.filter(item => item.agentStatus === "running" || item.agentStatus === "pending").length;
   return h("row", { key: "agents", role: "claude.composer.agents", ...(running ? { tone: "info" } : {}), gap: "xs", align: "center", title: `${running ? `${running} running, ` : ""}${agents.length} subagent${agents.length === 1 ? "" : "s"} in this session\nAlt+A shows them beside the conversation`, onClick: () => on.toggleAgents() }, [
-    running ? h("spinner", { key: "spin", style: "dots" }) : h("icon", { key: "icon", name: "agents" }),
+    running ? spark("spin", "think", "Subagents are working") : h("icon", { key: "icon", name: "agents" }),
     h("text", { key: "label", wrap: "none", spans: [s(running ? `${running} agent${running === 1 ? "" : "s"}` : `${agents.length} agent${agents.length === 1 ? "" : "s"}`, running ? "info" : "muted")] }),
   ]);
 }
@@ -288,9 +290,10 @@ function composer(conv: Conversation, state: DockState, on: DockActions): Node {
     ]),
     h("row", { key: "bar", role: "omp.composer.bar", gap: "sm", align: "center" }, [
       h("row", { key: "model", role: "omp.composer.model", gap: "xs", align: "center", title: "Switch model  Alt+P", onClick: () => on.pickModel() }, [
-        state.modelIcon ? h("icon", { key: "logo", name: state.modelIcon, role: "claude.composer.model.logo" }) : null,
+        // Another maker's model shows its mark. Claude's own needs none: the effort gauge beside it is Claude's spark.
+        state.modelIcon && !(state.reasoning && state.modelIcon === "provider:anthropic") ? h("icon", { key: "logo", name: state.modelIcon, role: "claude.composer.model.logo" }) : null,
         state.reasoning
-          ? h("effort", { key: "effort", role: "omp.composer.model.effort", level: state.effort || "off", title: state.effort === "off" ? "Thinking is off  Alt+T" : `Effort: ${state.effort || "default"}  Alt+E`, actions: { click: "effort" }, onAction: { effort: () => on.cycleEffort() } })
+          ? h("row", { key: "effort", role: "omp.composer.model.effort", align: "center", title: state.effort === "off" ? "Thinking is off  Alt+T" : `Effort: ${state.effort || "default"}  Alt+E`, onClick: () => on.cycleEffort() }, [gauge("gauge", state.effort || "auto")])
           : null,
         h("text", { key: "name", wrap: "none", spans: [s(state.modelName || "no model", "statusLineModel")] }),
         h("icon", { key: "chev", name: "chev" }),
@@ -315,8 +318,11 @@ function composer(conv: Conversation, state: DockState, on: DockActions): Node {
       h("text", { key: "usage", role: "omp.composer.usage", wrap: "none", text: usage, ...(usage ? { title: "Session cost" } : {}), onClick: () => on.showSession() }),
       conv.busy && editor.empty
         ? h("text", { key: "stop", role: "omp.composer.stop", text: "Stop", tone: "error", title: "Stop  esc", onClick: () => on.interrupt() })
-        : h("kbd", { key: "send", role: "omp.composer.send", keys: ["enter"], title: conv.busy ? "Send now  ⏎" : "Send  ⏎", onClick: () => on.submit() }),
+        : h("kbd", { key: "send", role: "omp.composer.send", keys: ["enter"], ...(editor.empty ? {} : { tone: "accent" }), title: conv.busy ? "Send now  ⏎" : "Send  ⏎", onClick: () => on.submit() }),
     ]),
+    // Light pooled under the composer, and the line that gathers along its edge while Claude works (the stylesheet moves both).
+    h("text", { key: "glow", role: "claude.composer.glow", text: "\u200b" }),
+    conv.busy ? h("text", { key: "beam", role: "claude.composer.beam", text: "\u200b" }) : null,
   ]);
 }
 

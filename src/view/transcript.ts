@@ -15,8 +15,12 @@ export interface WelcomeInfo {
   tip: string;
   /** Who is signed in and on what plan, when known. */
   account: string;
-  /** The blob id of Claude's mark, when the terminal takes images. */
-  logo?: string | undefined;
+  /** The line Claude greets with. */
+  greeting: string;
+  /** Ultracode on the start screen: `on` (Clawd powers up), `spent` (it was just switched off: the power drains), `rest` (after that), `off` (never on). */
+  power: Power;
+  /** Nothing has been said yet. Once it has, this is the conversation's head and holds still. */
+  fresh: boolean;
 }
 
 export const TIPS: readonly string[] = [
@@ -35,22 +39,49 @@ export const TIPS: readonly string[] = [
   "Ctrl+B sends the running command or subagent to the background",
 ];
 
-/** The lockup shown above an empty transcript. */
+const layer = (name: string): Node => h("text", { key: name, role: `claude.ssj.${name}`, text: "\u200b" });
+const clawd = (): Node => h("text", { key: "clawd", role: "claude.clawd", aria: "Clawd, Claude Code's creature", text: "\u200b" });
+
+export type Power = "off" | "on" | "spent" | "rest";
+
+/**
+ * Clawd's stage. Ultracode on: Clawd as it was (it shakes, then the flash takes it), the dust, the flash, and all
+ * that arrives with the power. Just switched off: the aura as it stood, draining, steam, and Clawd itself again.
+ */
+function stage(power: Power): Node {
+  if (power === "on") {
+    return h("row", { key: "stage", role: "claude.hero.stage.flare", justify: "center", aria: "Clawd, powered up by Ultracode" }, [
+      h("row", { key: "power", role: "claude.ssj.power" }, ["aura0", "aura1", "aura2", "core", "hair", "clawd", "bolt0", "bolt1"].map(layer)),
+      layer("dust"),
+      clawd(),
+      layer("flash"),
+    ]);
+  }
+  if (power === "spent") {
+    return h("row", { key: "stage", role: "claude.hero.stage.cool", justify: "center" }, [
+      h("row", { key: "power", role: "claude.ssj.power" }, ["aura0", "core", "hair", "clawd"].map(layer)),
+      layer("dust"),
+      clawd(),
+    ]);
+  }
+  // `rest` is the plain stage without the hop Clawd makes when it first appears.
+  return h("row", { key: "stage", role: power === "rest" ? "claude.hero.stage.rest" : "claude.hero.stage", justify: "center" }, [clawd()]);
+}
+
+/** A greeting for the hour, as Claude's own apps give. */
+export function greeting(hour: number): string {
+  return hour < 5 ? "Still up?" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : hour < 22 ? "Good evening" : "Working late?";
+}
+
+/** The start screen above an empty transcript: Clawd, a greeting and the session's facts. */
 export function welcome(info: WelcomeInfo): Node {
+  const product = info.claudeVersion ? `Claude Code ${info.claudeVersion}` : "Claude Code";
+  const facts = [info.name === "Claude Code" ? "" : info.name, product, `claude-tsp ${info.version}`, info.account].filter(Boolean).join(" · ").replace(/-/g, "\u2011"); // a name never breaks at its hyphen
   return h("card", { key: "welcome", role: "omp.welcome" }, [
-    h("row", { key: "lockup", align: "center", gap: "md", role: "omp.welcome.lockup" }, [
-      info.logo
-        ? h("image", { key: "logo", role: "omp.welcome.logo", blob: info.logo, alt: "Claude", w: 128 })
-        : h("text", { key: "logo", role: "omp.welcome.logo", wrap: "none", aria: "Claude", spans: [s("✻", "accent strong")] }),
-      h("col", { key: "mark", role: "omp.welcome.mark" }, [
-        h("text", { key: "wordmark", wrap: "none", role: "omp.welcome.wordmark", spans: [s(info.name, "strong")] }),
-        h("text", {
-          key: "version",
-          wrap: "none",
-          role: "omp.welcome.version",
-          spans: [s(info.claudeVersion ? `v${info.claudeVersion}` : "Claude Code", "dim mono"), s(` · claude-tsp ${info.version}`, "dim mono"), ...(info.account ? [s(` · ${info.account}`, "dim mono")] : [])],
-        }),
-      ]),
+    h("col", { key: "hero", role: info.fresh ? "claude.hero" : "claude.hero.past", align: "center" }, [
+      stage(info.power),
+      h("text", { key: "greeting", role: "claude.hero.greeting", wrap: "none", text: info.greeting }),
+      h("text", { key: "facts", role: "claude.hero.facts", text: facts }),
     ]),
     h("row", { key: "tip", gap: "sm", align: "start", role: "omp.welcome.tip" }, [
       h("icon", { key: "0", name: "lightbulb", role: "omp.welcome.tip-icon" }),
