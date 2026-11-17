@@ -90,9 +90,11 @@ start "claude-pi-tsp --model claude-haiku-4-5 --permission-mode default"
 has "starts: welcome, model chip, mode pill" '[data-role="omp.welcome"]'
 says "the local model is named" '[data-role="omp.composer.model"]' "DeepSeek"
 has "mode pill" '[data-role="claude.composer.mode"]'
+hasnt "at rest, the tab does not show the session as working" '.tt.working'
 
 say "Use Write to create notes.txt containing hello. Reply done." 3; until_ "$APPROVAL" 40
 has "a write asks for approval" "$APPROVAL"
+hasnt "waiting on an approval is not working either" '.tt.working'
 says "the approval offers accept-all-edits" '[data-role="omp.approval.choices"]' "accept all edits"
 key 2; idle 40
 [ "$(cat $DEMO/notes.txt 2>/dev/null)" = hello ] && ok "the file was written after approval" 1 || ok "the file was written after approval" 0
@@ -226,8 +228,10 @@ says "the traced call's output is untouched" '[data-role="omp.tool.bash"]' "alph
 say "/trace" 3
 say "Call the Bash tool once, foreground, with exactly: for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo tick \$i; sleep 3; done" 3; approve 1; sleep 6
 has "a command is running" '[data-role="omp.working"]'
+has "and the tab shows the session working" '.tt.working'
 key Escape; sleep 5
 hasnt "Esc stops the turn" '[data-role="omp.working"]'
+hasnt "and the tab comes to rest" '.tt.working'
 hasnt "a stopped turn leaves no error card" '[data-role="omp.error"]'
 
 say "/tui" 8; ctl type '"/exit"' >/dev/null; key Enter; sleep 3; key Enter; until_ '[data-role="omp.composer.model"]' 40; sleep 3

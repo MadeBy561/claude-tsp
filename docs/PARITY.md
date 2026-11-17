@@ -105,6 +105,9 @@ each known name into it) has an entry here or is run by Claude Code itself.
 | Rewind page, fork picker, outline, copy picker, history search | ✅ | |
 | Usage line per message, charts for tables, images, clipboard paste | ✅ | |
 | Vim keys, key bindings file, external editor, desktop notifications | ✅ | |
+| Run status on the tab, sidebar and inbox (OSC 7501), the session's name as the title, its folder (OSC 7) | ✅ | at rest, working, waiting on you (with the question), finished, failed; cleared on exit and while another program has the pane |
+| The pane's own icon on the tab and in the sidebar | ✅ | Claude's mark: the surface names itself `claude` to Tern, the name Tern has that icon for |
+| Tern restarts the session after its own restart | ❌ | Tern does this for omp alone (it runs `omp --resume` on a file omp names); nothing a surface can ask for |
 | Session tree (`/tree`) | ✅ | built from the session file's parent links, old branches included |
 | Shell trace and replay | ✅ | `!commands` are always traced; `/trace` traces Claude's Bash calls through a PreToolUse hook answered over the protocol (off by default: a traced command no longer matches allow rules written for its text). The inspector plays, steps and seeks |
 | Auto-compact, auto-retry and steering-mode switches | ✅ | Settings → Turns: Auto-compact and Auto-retry (Claude Code's `DISABLE_AUTO_COMPACT` and `CLAUDE_CODE_MAX_RETRIES`, applied by starting it again on the session), and what Enter does during a turn: next step, after the turn, or stop and send |
@@ -151,8 +154,11 @@ Beyond `tools/verify.sh`, these were run once by hand with the account's owner (
 ## Verification
 
 `tools/verify.sh` drives both commands in headless Tern and checks the live
-document: 174 checks in ten sections, each a PASS or FAIL line. The last full run is kept in
-`docs/VERIFY.txt` (2026-11-16, version 1.3.0, Tern 0.9.20): **174 passed, 0 failed**.
+document: 178 checks in ten sections, each a PASS or FAIL line. The last full run is kept in
+`docs/VERIFY.txt` (2026-11-17, version 1.3.1, Tern 0.9.20): **177 passed, 1 failed**. The one failure
+is outside the surface: Claude Code offered no prompt suggestion in five turns, as it does not while
+the account it runs under carries a usage warning (driven directly, without the surface, it offers
+none either). The check last passed on 2026-11-16.
 `docs/OMP-ROWS.md` lists each of omp's 104 rows with the check or test that
 shows it.
 

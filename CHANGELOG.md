@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.3.1] - 2026-11-17
+
+### Fixed
+
+- **A tab no longer looks busy for as long as the session is open.** Tern
+  shows a program that says nothing about itself as a command still running:
+  the name on its tab and in the sidebar shimmers until it exits. claude-tsp
+  said nothing, so the shimmer never stopped. It now reports its state as
+  oh-my-pi does, in the Program Status Protocol (OSC 7501): at rest, working
+  (a turn, a compaction, a retry, a `!command`, a subagent still running
+  behind a finished turn), waiting on you (an approval, a question, a form
+  from an MCP server, each with what it asks), finished, or failed with the
+  reason. Tern's tab, sidebar and inbox follow: still at rest, shimmering
+  while it works, marked when it needs you. A turn you stop leaves the
+  session at rest, not failed. The record is taken back when the session
+  ends, and while another program has the pane (`/tui`, your editor).
+
+- **The tab's icon is Claude's.** Tern chooses a pane's icon by the name a
+  program gives it. claude-tsp gave a name Tern does not know, so its tab and
+  sidebar row carried the star Tern draws for an unknown agent. It now names
+  itself as Claude Code, and gets Claude's own mark, with the status dot on
+  it.
+
+### Added
+
+- **The tab is named for the session.** Its title is the session's name
+  (Claude Code's own, or `/rename`), and until it has one, the first thing
+  you asked, as the session list shows it. Several sessions can then be told
+  apart in the tab strip and the sidebar. `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`
+  leaves the title alone, as it does for Claude Code.
+- **The tab follows the session's folder.** Moving the session with `/cd`,
+  or resuming one from another project, tells Tern where it now works
+  (OSC 7), as a shell does at each prompt.
+
 ## [1.3.0] - 2026-11-16
 
 The surface gets a look of its own. Until now it was styled as oh-my-pi's is,

@@ -52,7 +52,9 @@ export async function main(args: string[]): Promise<number> {
   const launch = parseArgs(args);
   if (!launch.native || !process.stdin.isTTY || !process.stdout.isTTY || process.env.CLAUDE_TSP_STOCK === "1") return runStock(args);
   const { VERSION, App } = await import("./app.js");
-  const options: ConnectOptions = { app: "claude-tsp", version: VERSION, features: ["edit", "undo", "send"], ...(process.env.CLAUDE_TSP_RECORD ? { record: process.env.CLAUDE_TSP_RECORD } : {}) };
+  // Tern picks a pane's icon by the program's name: "claude" is the one it draws Claude's mark for (any other
+  // name of ours gets the star of an agent it does not know).
+  const options: ConnectOptions = { app: "claude", version: VERSION, features: ["edit", "undo", "send"], ...(process.env.CLAUDE_TSP_RECORD ? { record: process.env.CLAUDE_TSP_RECORD } : {}) };
   const start = (session: Session): InstanceType<typeof App> => new App({ session, launch, cwd: process.cwd() });
   let app: InstanceType<typeof App>;
   if (inTern()) {
@@ -61,7 +63,11 @@ export async function main(args: string[]): Promise<number> {
     const session = new Session(process.stdin, process.stdout, options);
     app = start(session);
     app.render();
-    if (!(await session.handshake())) return runStock(args);
+    if (!(await session.handshake())) {
+      // Not a surface after all: what the first frame told the terminal is taken back.
+      app.release();
+      return runStock(args);
+    }
     app.render();
   } else {
     // Anywhere else nothing is drawn until Tern answers; a terminal that is

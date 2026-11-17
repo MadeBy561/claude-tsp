@@ -218,6 +218,7 @@ system's reduced-motion setting.
 | `CLAUDE_TSP_HOME` | Where prompt history, display choices and key bindings are kept (default `~/.local/state/claude-tsp`) |
 | `CLAUDE_TSP_STOCK=1` | Always run stock Claude Code |
 | `CLAUDE_TSP_NOTIFICATIONS=0` | No desktop notification when a turn ends or an approval waits in a hidden pane |
+| `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` | The tab keeps its own name instead of the session's, as for `claude` itself |
 | `CLAUDE_TSP_RECORD=file`, `CLAUDE_TSP_TRACE=file` | Record the TSP traffic; log TSP errors |
 | `CLAUDE_TSP_CSS=file` | A stylesheet to try in place of the built-in one |
 | `CLAUDE_TSP_NO_UPDATE_CHECK=1` | Never ask GitHub whether a newer claude-tsp is out (`/update` still does when you run it) |

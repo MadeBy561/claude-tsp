@@ -2,7 +2,9 @@
 PASS  starts: welcome, model chip, mode pill
 PASS  the local model is named
 PASS  mode pill
+PASS  at rest, the tab does not show the session as working
 PASS  a write asks for approval
+PASS  waiting on an approval is not working either
 PASS  the approval offers accept-all-edits
 PASS  the file was written after approval
 PASS  the mode became Accept edits
@@ -76,7 +78,9 @@ PASS  /resume redraws another session
 PASS  with /trace on, Claude's Bash call is traced too
 PASS  the traced call's output is untouched
 PASS  a command is running
+PASS  and the tab shows the session working
 PASS  Esc stops the turn
+PASS  and the tab comes to rest
 PASS  a stopped turn leaves no error card
 PASS  the pane comes back from Claude Code's own UI
 PASS  light theme: the accent is Claude's clay
@@ -96,7 +100,7 @@ PASS  plan mode ends in a plan approval
 PASS  the plan approval offers accept-edits
 PASS  approving the plan switches to Accept edits
 PASS  the planned edit was made
-PASS  a prompt suggestion is offered
+FAIL  a prompt suggestion is offered   wanted 'Tab' in: …How can I help you today?  (shot verify-stock-fail-1)
 PASS  Tab takes the suggestion into the draft
 PASS  an MCP server's form opens
 PASS  the form's answer reached the tool
@@ -183,4 +187,4 @@ PASS  an unfocused pane folds the composer and Claude's chips fade with it
 PASS  claude-tsp --check-compat passes from a shell
 PASS  no TSP errors (update)
 
-174 passed, 0 failed
+177 passed, 1 failed

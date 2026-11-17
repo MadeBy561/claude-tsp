@@ -29,6 +29,7 @@ import { BlockRegion } from "./region.js";
 import type { ShellPrefs } from "./shell.js";
 import { installSplice } from "./splice.js";
 import { latestSession, listSessions, readEntries, type SessionRow } from "./sessions.js";
+import { Signals, type RunStatus } from "./signals.js";
 import { collectStats, emptyStats, type Stats } from "./stats.js";
 import { addRule, CLAUDE_CHOICES, CLAUDE_SETTINGS, getKey, getNested, setNested, readEnv, removeRule, setKey, SCOPES, setEnv, settingsPath, validRule, type Behavior, type Scope } from "./settingsfile.js";
 import { checkBinary, formatReport, standing, supported } from "./compat.js";
@@ -105,6 +106,8 @@ interface Approval {
   id: string;
   toolUseId: string;
   title: string;
+  /** The title and what it is about, in a line: for a notification and the terminal's status. */
+  summary: string;
   origin?: string;
   reason?: string;
   preview: () => (Node | null)[];
@@ -260,6 +263,18 @@ export class App {
   /** The process is being replaced (resume, rewind, fork): its exit is expected. */
   #swapping = false;
   #visible = true;
+  /** What the terminal is told beside the drawing: the run status, the session's name, its folder. */
+  readonly #signals: Signals;
+  /** How the last turn of this session left it: finished, failed, or at rest (also after a stop). */
+  #settledStatus: RunStatus = { state: "idle" };
+  #settledSession = "";
+  #interrupted = false;
+  /** Another program has the terminal (an editor, Claude Code's own interface): nothing is reported meanwhile. */
+  #handedOver = false;
+  /** MCP servers waiting on an answer from the user, by request id: what each asked. */
+  #asking = new Map<string, string>();
+  /** Whether a background subagent is still at work, as of the conversation's change `at`. */
+  #behind = { at: -1, running: false };
   // Display state.
   #fold = new Map<string, boolean>();
   #shellPrefs = new Map<string, ShellPrefs>();
@@ -346,6 +361,9 @@ export class App {
     this.#session = options.session;
     this.#launch = options.launch;
     this.#cwd = options.cwd;
+    this.#signals = new Signals(text => void process.stdout.write(text), "claude-tsp", options.cwd);
+    // However the process ends, no status record of ours outlives it.
+    process.once("exit", () => this.#signals.close());
     this.#files = new FileIndex(options.cwd);
     installSplice();
     this.#surface = this.#session.open(SURFACE);
@@ -765,6 +783,7 @@ export class App {
       this.#lastError = message;
       this.conv.add({ kind: "notice", text: message, tone: "error" }, "n");
     }
+    this.#settle({ state: "error", msg: message });
     this.#starting = false;
     this.schedule();
   }
@@ -780,7 +799,14 @@ export class App {
     dropTraces();
     if (this.#rewindPage) await this.#rewindPage.close({ keep: false });
     await Promise.race([this.#cc?.stop() ?? Promise.resolve(), new Promise(done => setTimeout(done, 2600))]);
+    this.#signals.close();
     await this.#session.close();
+  }
+
+  /** Gives the terminal back without a session having run: stock Claude Code takes it from here. */
+  release(): void {
+    this.#stopping = true;
+    this.#signals.close();
   }
 
   // ───────────────────────────────────────────────────────────── Claude's records
@@ -826,6 +852,7 @@ export class App {
         const wasBusy = this.conv.busy;
         this.conv.onMessage(record);
         this.#settlePending = true;
+        this.#turnEnded(record, wasBusy);
         void this.#refreshContext(true).then(() => this.#runStatusLine());
         void this.#refreshPluginUi();
         // A command Claude Code ran may have changed the model or effort under us.
@@ -895,6 +922,7 @@ export class App {
       this.#questions.splice(this.#questions.indexOf(question), 1);
       this.conv.setAwaiting(question.toolUseId, false);
     }
+    this.#asking.delete(id);
     this.schedule();
   }
 
@@ -902,6 +930,7 @@ export class App {
   #denyAll(): void {
     for (const approval of this.#approvals.splice(0)) this.#cc?.respond(approval.id, { behavior: "deny", message: "The request was cancelled.", interrupt: true });
     for (const question of this.#questions.splice(0)) this.#cc?.respond(question.id, { behavior: "deny", message: "The questions were cancelled.", interrupt: true });
+    this.#asking.clear();
   }
 
   // ───────────────────────────────────────────────────────────── permissions
@@ -998,6 +1027,7 @@ export class App {
       id,
       toolUseId,
       title,
+      summary: `${title} ${firstLine(input.command ?? input.file_path ?? input.url ?? "", 100)}`.trim(),
       ...(request.agent_id ? { origin: `subagent${agent?.agentType ? ` · ${agent.agentType}` : ""}` } : {}),
       ...(reason && request.decision_reason_type !== "mode" ? { reason } : {}),
       preview: () => this.#preview(tool, input),
@@ -1009,7 +1039,7 @@ export class App {
     };
     this.#approvals.push(approval);
     this.conv.setAwaiting(toolUseId, true);
-    if (!this.#visible) this.#notify(`${PROFILE.name} needs your approval`, `${title} ${firstLine(input.command ?? input.file_path ?? input.url ?? "", 100)}`);
+    if (!this.#visible) this.#notify(`${PROFILE.name} needs your approval`, approval.summary);
   }
 
   /** Answers an approval with one of its choices; `null` refuses and stops the turn. */
@@ -1170,6 +1200,11 @@ export class App {
   #elicit(id: string, request: Record<string, any>): void {
     const server = String(request.display_name ?? request.mcp_server_name ?? "MCP server");
     const title = `${server}: ${firstLine(request.message ?? request.title ?? "needs your input", 160)}`;
+    this.#asking.set(id, title);
+    const answer = (reply: Record<string, unknown>): void => {
+      this.#asking.delete(id);
+      this.#cc.respond(id, reply);
+    };
     if (request.mode === "url" && request.url) {
       this.#openPicker({
         props: { title, subtitle: String(request.url), noun: "options", size: "md", layout: "rows", preview: "none" },
@@ -1187,9 +1222,9 @@ export class App {
           if (choice === "copy") return this.copy(String(request.url), "Link");
           picker.options.cancel = undefined;
           this.#picker = null;
-          this.#cc.respond(id, { action: choice === "accept" ? "accept" : "decline" });
+          answer({ action: choice === "accept" ? "accept" : "decline" });
         },
-        cancel: () => this.#cc.respond(id, { action: "cancel" }),
+        cancel: () => answer({ action: "cancel" }),
       });
       return;
     }
@@ -1199,7 +1234,7 @@ export class App {
     const step = (index: number): void => {
       const name = order[index];
       if (name === undefined) {
-        this.#cc.respond(id, { action: "accept", content });
+        answer({ action: "accept", content });
         return;
       }
       const schema = properties[name] ?? {};
@@ -1210,14 +1245,14 @@ export class App {
         multiline: false,
         text: schema.default !== undefined ? String(schema.default) : "",
         done: value => {
-          if (value === null) return this.#cc.respond(id, { action: "cancel" });
+          if (value === null) return answer({ action: "cancel" });
           const text = value.trim();
           content[name] = schema.type === "boolean" ? /^(y|yes|true|1)$/i.test(text) : schema.type === "number" || schema.type === "integer" ? Number(text) : text;
           step(index + 1);
         },
       });
     };
-    if (!order.length) this.#cc.respond(id, { action: "accept", content: {} });
+    if (!order.length) answer({ action: "accept", content: {} });
     else step(0);
   }
 
@@ -1435,6 +1470,62 @@ export class App {
     else this.toast("No shell command in this session yet", "warning");
   }
 
+  /** Records how a turn that just ended left the session: failed, stopped, or finished with a result to read. */
+  #turnEnded(record: Record<string, any>, wasBusy: boolean): void {
+    const last = this.conv.items.findLast(item => item.kind !== "usage");
+    const errored = Boolean(record.is_error) || String(record.subtype || "").startsWith("error");
+    // A turn the user stopped also ends "in error", with nothing added to the transcript: that is rest, not failure.
+    if (last?.kind === "error") this.#settle({ state: "error", msg: last.text ?? "" });
+    else if (errored || this.#interrupted) this.#settle({ state: "idle" });
+    else if (wasBusy) this.#settle({ state: "done" });
+    this.#interrupted = false;
+  }
+
+  #settle(status: RunStatus): void {
+    this.#settledStatus = status;
+    this.#settledSession = this.conv.sessionId;
+  }
+
+  /** The session's state as the terminal shows it on its tab: see `signals.ts`. */
+  #runStatus(): RunStatus {
+    const approval = this.#approvals[0];
+    if (approval) return { state: "blocked", kind: "permission", msg: approval.summary };
+    const question = this.#questions[0];
+    if (question) return { state: "blocked", kind: "question", msg: question.questions[question.at]?.question ?? "" };
+    const asked = this.#asking.values().next();
+    if (!asked.done) return { state: "blocked", kind: "question", msg: asked.value };
+    const conv = this.conv;
+    if (conv.busy || conv.compacting || conv.retry || conv.shell || this.#agentsBehind()) return { state: "working" };
+    // What an earlier session left says nothing about the one now open (/clear, /resume).
+    return this.#settledSession === conv.sessionId ? this.#settledStatus : { state: "idle" };
+  }
+
+  /**
+   * A subagent still at work behind a finished turn will wake Claude when it ends: the session is not at rest.
+   * A background command is not counted: a server left running would keep the tab busy for good.
+   * The conversation is read again only when it has changed, so a frame at rest (a key typed) costs no scan.
+   */
+  #agentsBehind(): boolean {
+    const at = this.conv.changed;
+    if (this.#behind.at !== at) this.#behind = { at, running: this.conv.items.some(item => item.kind === "agent" && item.background && (item.agentStatus === "running" || item.agentStatus === "pending")) };
+    return this.#behind.running;
+  }
+
+  /** What the tab is called: the session's name, or, as in the session list, the first thing asked. */
+  #tabTitle(): string {
+    if (this.conv.sessionName) return this.conv.sessionName;
+    const asked = this.conv.items.find(item => item.kind === "user" && item.text && !item.text.startsWith("/"));
+    return asked ? firstLine(asked.text, 48) : "";
+  }
+
+  /** Tells the terminal the session's state, name and folder; each is written only when it changes. */
+  #signal(): void {
+    if (this.#handedOver) return;
+    this.#signals.status(this.#runStatus());
+    if (!process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE) this.#signals.title(this.#tabTitle());
+    this.#signals.folder(this.#cwd);
+  }
+
   #activity(): string {
     if (this.#approvals.length) return "Waiting for your approval";
     if (this.#questions.length) return "Waiting for your answer";
@@ -1515,7 +1606,9 @@ export class App {
   }
 
   render(): void {
-    if (this.#stopping || this.#surface.closed) return;
+    if (this.#stopping) return;
+    this.#signal();
+    if (this.#surface.closed) return;
     const ctx = this.#viewCtx();
     const conv = this.conv;
     const built = this.#transcript.build(conv, ctx);
@@ -2395,6 +2488,7 @@ export class App {
       return;
     }
     const item = this.conv.addUser(text, images);
+    this.#interrupted = false;
     this.conv.busy = true;
     this.conv.runStartedAt = Date.now();
     this.conv.suggestion = "";
@@ -2505,6 +2599,7 @@ export class App {
       return;
     }
     if (!this.conv.busy && !this.conv.retry && !this.conv.compacting) return;
+    this.#interrupted = true;
     try {
       await this.#cc.request("interrupt", {}, 8000);
     } catch (error) {
@@ -2619,6 +2714,8 @@ export class App {
 
   async #external(bin: string, args: string[], env: Record<string, string> = {}, note = ""): Promise<void> {
     const adopt = this.#session.caps.features.includes("adopt");
+    this.#handedOver = true;
+    this.#signals.release();
     if (adopt) await this.#surface.close({ keep: true });
     else this.#surface.suspend();
     process.stdin.setRawMode?.(false);
@@ -2635,6 +2732,7 @@ export class App {
       process.stdin.resume();
       // The child may have switched bracketed paste off on its way out.
       process.stdout.write("\x1b[?2004h");
+      this.#handedOver = false;
       if (adopt) this.#surface = this.#session.open({ ...SURFACE, adopt: true });
       else this.#surface.resume();
       this.#applyStyles();
